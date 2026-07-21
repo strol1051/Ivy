@@ -1,6 +1,6 @@
 {
-  "name": "Gestion Scolaire",
-  "short_name": "Gestion Scolaire",
+  "name": "Ivy1.0",
+  "short_name": "Ivy1.0",
   "description": "Gestion des élèves, notes, bulletins et paiements",
   "start_url": "/",
   "display": "standalone",
