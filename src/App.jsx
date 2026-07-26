@@ -1362,7 +1362,13 @@ function AuthScreen() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#1B2A4A", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      backgroundColor: "#1B2A4A",
+      backgroundImage: "linear-gradient(rgba(27,42,74,0.55), rgba(27,42,74,0.55)), url(/login-bg.jpg)",
+      backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat",
+    }}>
       <div style={{ background: "#F7F5F0", borderRadius: 14, padding: 40, width: 400, boxShadow: "0 10px 40px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
           <School size={22} color="#D4A24C" />
@@ -1397,6 +1403,7 @@ function MainApp({ profile }) {
   const [schoolName, setSchoolNameState] = useState("Mon École");
   const [schoolCode, setSchoolCodeState] = useState("");
   const [schoolLogo, setSchoolLogoState] = useState("");
+  const [backgroundPhoto, setBackgroundPhotoState] = useState("");
   const [academicYear, setAcademicYearState] = useState("");
   const [currency, setCurrencyState] = useState("HTG");
   const [themeColor, setThemeColorState] = useState("#1B2A4A");
@@ -1433,6 +1440,7 @@ function MainApp({ profile }) {
     setSchoolNameState(s.name || "Mon École");
     setSchoolCodeState(s.code || "");
     setSchoolLogoState(s.logo || "");
+    setBackgroundPhotoState(s.background_photo || "");
     setAcademicYearState(s.academic_year || "");
     setCurrencyState(s.currency || "HTG");
     setThemeColorState(s.theme_color || "#1B2A4A");
@@ -1487,6 +1495,7 @@ function MainApp({ profile }) {
   const setSchoolName = (v) => updateSchool({ name: v });
   const setSchoolCode = (v) => updateSchool({ code: v });
   const setSchoolLogo = (v) => updateSchool({ logo: v });
+  const setBackgroundPhoto = (v) => updateSchool({ background_photo: v });
   const setAcademicYear = (v) => updateSchool({ academic_year: v });
   const setCurrency = (v) => updateSchool({ currency: v });
   const setThemeColor = (v) => updateSchool({ theme_color: v });
@@ -1648,7 +1657,14 @@ function MainApp({ profile }) {
   return (
     <>
     <ThemeVars color={themeColor} style={themeStyle} />
-    <div style={{ minHeight: "100vh", background: "#F7F5F0", fontFamily: "'Segoe UI', system-ui, sans-serif", color: "var(--primary)", display: "flex" }}>
+    <div style={{
+      minHeight: "100vh", fontFamily: "'Segoe UI', system-ui, sans-serif", color: "var(--primary)", display: "flex",
+      backgroundColor: "#F7F5F0",
+      ...(backgroundPhoto ? {
+        backgroundImage: `linear-gradient(rgba(247,245,240,0.88), rgba(247,245,240,0.88)), url(${backgroundPhoto})`,
+        backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed", backgroundRepeat: "no-repeat",
+      } : {}),
+    }}>
       <style>{`
         @page { size: ${paperFormat === "Lettre" ? "letter" : "A4"}; margin: 0; }
         @media print { .no-print { display: none !important; } .print-area { box-shadow: none !important; margin: 0 !important; } body { background: white !important; } .remark-print-only { display: block !important; } }
@@ -1685,6 +1701,7 @@ function MainApp({ profile }) {
               schoolName={schoolName} setSchoolName={setSchoolName}
               schoolCode={schoolCode} setSchoolCode={setSchoolCode}
               schoolLogo={schoolLogo} setSchoolLogo={setSchoolLogo}
+              backgroundPhoto={backgroundPhoto} setBackgroundPhoto={setBackgroundPhoto}
               academicYear={academicYear} setAcademicYear={setAcademicYear}
               currency={currency} setCurrency={setCurrency}
               subjects={subjects} setSubjects={setSubjects}
@@ -1810,6 +1827,7 @@ function UserRow({ user, isSelf, onUpdateRole, onRemove }) {
 
 function ParametresView({
   schoolName, setSchoolName, schoolCode, setSchoolCode, schoolLogo, setSchoolLogo,
+  backgroundPhoto, setBackgroundPhoto,
   academicYear, setAcademicYear, currency, setCurrency,
   subjects, setSubjects, classSubjects, setClassSubjects,
   coefficients, setCoefficients, tuitionFees, setTuitionFee,
@@ -1825,6 +1843,7 @@ function ParametresView({
   const [feeClasse, setFeeClasse] = useState(CLASSES[0]);
   const [subjClasse, setSubjClasse] = useState(CLASSES[0]);
   const [logoError, setLogoError] = useState("");
+  const [bgError, setBgError] = useState("");
   const [pwd, setPwd] = useState(paramsPassword || "");
   const [pwdSaved, setPwdSaved] = useState(false);
   const [coeffDraft, setCoeffDraft] = useState({});
@@ -1852,6 +1871,11 @@ function ParametresView({
     if (!file) return;
     try { setLogoError(""); setSchoolLogo(await resizePhoto(file, 240, 0.85)); }
     catch { setLogoError("Impossible de lire cette image, réessayez avec une autre."); }
+  };
+  const handleBackgroundPhoto = async (file) => {
+    if (!file) return;
+    try { setBgError(""); setBackgroundPhoto(await resizePhoto(file, 1600, 0.75)); }
+    catch { setBgError("Impossible de lire cette image, réessayez avec une autre."); }
   };
 
   const [newClassSubject, setNewClassSubject] = useState("");
@@ -1887,6 +1911,30 @@ function ParametresView({
             </label>
             {schoolLogo && <button onClick={() => setSchoolLogo("")} style={{ ...linkBtn, marginLeft: 12, color: "#A3272E" }}>Retirer</button>}
             {logoError && <div style={{ fontSize: 12, color: "#A3272E", marginTop: 4 }}>{logoError}</div>}
+          </div>
+        </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Photo de fond du tableau de bord</div>
+        <div style={{ fontSize: 12.5, color: "#8B8578", marginBottom: 14 }}>
+          Affichée en arrière-plan de l'espace Élèves/Notes/Bulletins, une fois connecté. Change à tout moment, sans avoir besoin de toucher au code.
+        </div>
+        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+          {backgroundPhoto ? (
+            <img src={backgroundPhoto} alt="Fond" style={{ width: 96, height: 64, borderRadius: 10, objectFit: "cover", border: "1px solid #E5E1D6" }} />
+          ) : (
+            <div style={{ width: 96, height: 64, borderRadius: 10, background: "#F1EEE5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <School size={22} color="#8B8578" />
+            </div>
+          )}
+          <div>
+            <label style={{ ...linkBtn, cursor: "pointer" }}>
+              {backgroundPhoto ? "Changer la photo" : "Ajouter une photo"}
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleBackgroundPhoto(e.target.files?.[0])} />
+            </label>
+            {backgroundPhoto && <button onClick={() => setBackgroundPhoto("")} style={{ ...linkBtn, marginLeft: 12, color: "#A3272E" }}>Retirer</button>}
+            {bgError && <div style={{ fontSize: 12, color: "#A3272E", marginTop: 4 }}>{bgError}</div>}
           </div>
         </div>
       </div>

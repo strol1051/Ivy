@@ -17,6 +17,7 @@ create table if not exists schools (
   name text not null default 'Mon École',
   code text default '',
   logo text default '',
+  background_photo text default '',
   academic_year text default '',
   currency text default 'HTG',
   theme_color text default '#1B2A4A',
