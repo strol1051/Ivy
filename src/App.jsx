@@ -1371,7 +1371,7 @@ function AuthScreen() {
     }}>
       <div style={{ background: "#F7F5F0", borderRadius: 14, padding: 40, width: 400, boxShadow: "0 10px 40px rgba(0,0,0,0.3)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
-          <School size={22} color="#D4A24C" />
+          <img src="/icon-192.png" alt="Ivy1.0" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover" }} />
           <div style={{ fontFamily: "Georgia, serif", fontSize: 19, color: "#1B2A4A" }}>Gestion Scolaire</div>
         </div>
         <Field label="Email">
