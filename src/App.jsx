@@ -288,9 +288,11 @@ function Sidebar({ tab, setTab, schoolName, schoolLogo, currentUser, onLogout, i
         <LogOut size={16} /> Changer de compte
       </button>
 
-      <div style={{ marginTop: "auto", fontSize: 11.5, color: "#8492AD", paddingLeft: 4, lineHeight: 1.5 }}>
-        Prototype de gestion scolaire — données partagées entre les utilisateurs de cette appli.
-      </div>
+      {schoolLogo && (
+        <div style={{ marginTop: "auto", paddingLeft: 4, display: "flex", alignItems: "center" }}>
+          <img src={schoolLogo} alt={schoolName} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", opacity: 0.85 }} />
+        </div>
+      )}
     </aside>
   );
 }
