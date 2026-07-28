@@ -18,11 +18,13 @@ create table if not exists schools (
   code text default '',
   logo text default '',
   background_photo text default '',
+  address text default '',
+  phone text default '',
   academic_year text default '',
   currency text default 'HTG',
   theme_color text default '#1B2A4A',
   theme_style text default 'classique',
-  paper_format text default 'A4',
+  paper_format text default 'Lettre',
   params_password text default '',
   created_at timestamptz default now()
 );

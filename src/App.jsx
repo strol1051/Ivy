@@ -297,6 +297,31 @@ function Sidebar({ tab, setTab, schoolName, schoolLogo, currentUser, onLogout, i
   );
 }
 
+// En-tête standard des documents imprimables (bulletin, fiche technique,
+// état de paiement, décision de fin d'année, statistiques) : logo + nom de
+// l'école centrés sur une ligne, adresse/téléphone en dessous, ligne de
+// séparation, puis titre du document en gras/majuscules. Les classes
+// "doc-header" et "doc-title" servent d'accroche pour le CSS d'impression
+// (en-tête en couleur, reste du document en noir et blanc).
+function DocHeader({ schoolLogo, schoolName, schoolAddress, schoolPhone, title, logoSize = 30, nameSize = 16, titleSize = 11, titleLetterSpacing = 1, marginBottom = 20 }) {
+  return (
+    <>
+      <div className="doc-header" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, borderBottom: "2px solid var(--primary)", paddingBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: logoSize > 40 ? 12 : 10 }}>
+          {schoolLogo ? <img src={schoolLogo} alt="Logo" style={{ width: logoSize, height: logoSize, borderRadius: 8, objectFit: "cover" }} /> : <School size={logoSize - 10} color="#A3272E" />}
+          <div style={{ fontFamily: "var(--heading-font)", fontSize: nameSize, color: "var(--primary)", whiteSpace: "nowrap" }}>{schoolName}</div>
+        </div>
+        {(schoolAddress || schoolPhone) && (
+          <div style={{ fontSize: logoSize > 40 ? 12 : 11, color: "#8B8578" }}>
+            {[schoolAddress, schoolPhone && `Tél: ${schoolPhone}`].filter(Boolean).join(" · ")}
+          </div>
+        )}
+      </div>
+      <div className="doc-title" style={{ fontSize: titleSize, letterSpacing: titleLetterSpacing, textTransform: "uppercase", color: "#A3272E", fontWeight: 700, textAlign: "center", marginTop: 10, marginBottom }}>{title}</div>
+    </>
+  );
+}
+
 function SectionTitle({ children, sub }) {
   return (
     <div style={{ marginBottom: 28 }}>
@@ -329,7 +354,7 @@ function formatAddress(addr) {
   return parts.length ? parts.join(", ") : "—";
 }
 
-function ElevesView({ students, onAdd, onUpdate, onRemove, isDirection, isSecretaire, myClasses, schoolName, schoolLogo, schoolCode, paperFormat, paramsPassword }) {
+function ElevesView({ students, onAdd, onUpdate, onRemove, isDirection, isSecretaire, myClasses, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, paramsPassword }) {
   const canManage = isDirection || isSecretaire;
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -501,12 +526,12 @@ function ElevesView({ students, onAdd, onUpdate, onRemove, isDirection, isSecret
         </div>
       )}
 
-      {detailStudent && <StudentDetailModal student={detailStudent} onClose={() => setDetailId(null)} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} paperFormat={paperFormat} />}
+      {detailStudent && <StudentDetailModal student={detailStudent} onClose={() => setDetailId(null)} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} />}
     </div>
   );
 }
 
-function StudentDetailModal({ student, onClose, schoolName, schoolLogo, schoolCode, paperFormat }) {
+function StudentDetailModal({ student, onClose, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat }) {
   const resp = student.responsable || {};
   const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
   return (
@@ -515,7 +540,8 @@ function StudentDetailModal({ student, onClose, schoolName, schoolLogo, schoolCo
         @media print {
           body * { visibility: hidden; }
           .fiche-print-area, .fiche-print-area * { visibility: visible; }
-          .fiche-print-area { position: absolute; top: 0; left: 0; width: ${paper.width} !important; min-height: ${paper.height}; box-shadow: none !important; border: none !important; padding: 18mm !important; }
+          .fiche-print-area { position: absolute; top: 0; left: 0; width: ${paper.width} !important; min-height: ${paper.height}; box-shadow: none !important; border: none !important; padding: 19mm !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+          .fiche-print-area *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
           .fiche-modal-overlay { position: static !important; background: none !important; padding: 0 !important; }
           .fiche-no-print { display: none !important; }
         }
@@ -526,13 +552,7 @@ function StudentDetailModal({ student, onClose, schoolName, schoolLogo, schoolCo
           <button onClick={onClose} style={iconBtn}><X size={18} /></button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, borderBottom: "2px solid var(--primary)", paddingBottom: 14, marginBottom: 18 }}>
-          {schoolLogo ? <img src={schoolLogo} alt="Logo" style={{ width: 30, height: 30, borderRadius: 6, objectFit: "cover" }} /> : <School size={20} color="#A3272E" />}
-          <div>
-            <div style={{ fontFamily: "var(--heading-font)", fontSize: 16, color: "var(--primary)" }}>{schoolName}</div>
-            <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#A3272E", fontWeight: 600 }}>Fiche technique de l'élève</div>
-          </div>
-        </div>
+        <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="Fiche technique de l'élève" marginBottom={18} />
 
         <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 18 }}>
           <Avatar photo={student.photo} name={`${student.nom} ${student.prenom}`} size={54} />
@@ -709,7 +729,7 @@ function NotesView({ students, subjects, classSubjects, grades, mentions, coeffi
   );
 }
 
-function BulletinsView({ students, subjects, classSubjects, grades, mentions, schoolName, schoolLogo, schoolCode, isDirection, isSecretaire, myClasses, academicYear, coefficients, remarks, onSetRemark, paperFormat }) {
+function BulletinsView({ students, subjects, classSubjects, grades, mentions, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, isDirection, isSecretaire, myClasses, academicYear, coefficients, remarks, onSetRemark, paperFormat }) {
   const fullAccess = isDirection || isSecretaire;
   const visibleStudents = fullAccess ? students : students.filter((s) => (myClasses || []).includes(s.classe));
   const [studentId, setStudentId] = useState(visibleStudents[0]?.id || "");
@@ -766,15 +786,12 @@ function BulletinsView({ students, subjects, classSubjects, grades, mentions, sc
         <>
         <style>{`
           @media print {
-            .bulletin-print-area { width: ${paper.width} !important; min-height: ${paper.height}; padding: 18mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; }
+            .bulletin-print-area { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+            .bulletin-print-area *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
           }
         `}</style>
         <div className="print-area bulletin-print-area" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "44px 52px", maxWidth: 720, boxShadow: "0 1px 3px rgba(27,42,74,0.06)" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, borderBottom: "2px solid var(--primary)", paddingBottom: 18, marginBottom: 24 }}>
-            {schoolLogo && <img src={schoolLogo} alt="Logo" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover" }} />}
-            <div style={{ fontFamily: "var(--heading-font)", fontSize: 22, color: "var(--primary)" }}>{schoolName}</div>
-            <div style={{ fontSize: 12.5, letterSpacing: 1.5, textTransform: "uppercase", color: "#A3272E", fontWeight: 600 }}>Bulletin Scolaire</div>
-          </div>
+          <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="Bulletin Scolaire" logoSize={44} nameSize={22} titleSize={12.5} titleLetterSpacing={1.5} marginBottom={24} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px", fontSize: 14, marginBottom: 10 }}>
             <div><strong>Matricule :</strong> {formatMatricule(student.nom, student.prenom, student.matriculeNum)}</div>
@@ -825,7 +842,7 @@ function BulletinsView({ students, subjects, classSubjects, grades, mentions, sc
                 <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>Moyenne</div>
                 <div style={{ fontSize: 20, fontFamily: "var(--heading-font)", color: "var(--primary)", marginTop: 4 }}>
                   {moyenneAffichee !== null ? moyenneAffichee.toFixed(1) : "—"} / {sur10 ? 10 : 100}
-                  <span style={{ fontSize: 12.5, color: overall.color, marginLeft: 8, fontWeight: 600 }}>{overall.label}</span>
+                  <span className="keep-color" style={{ fontSize: 12.5, color: overall.color, marginLeft: 8, fontWeight: 600 }}>{overall.label}</span>
                 </div>
               </div>
               <div style={{ flex: 1, background: "#F1EEE5", borderRadius: 8, padding: "14px 20px" }}>
@@ -876,53 +893,97 @@ function BulletinsView({ students, subjects, classSubjects, grades, mentions, sc
   );
 }
 
-function StatistiquesView({ students, isDirection, myClasses }) {
+function StatCard({ label, value }) {
+  return (
+    <div style={{ flex: "1 1 200px", background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "18px 22px" }}>
+      <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontSize: 28, fontFamily: "var(--heading-font)", color: "var(--primary)", marginTop: 6 }}>{value}</div>
+    </div>
+  );
+}
+
+function StatistiquesView({ students, isDirection, myClasses, schoolName, schoolLogo, schoolAddress, schoolPhone, academicYear, paperFormat }) {
+  const [mode, setMode] = useState("ecole"); // ecole | classe
+  const [classe, setClasse] = useState(CLASSES[0]);
+  const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
+
   const visible = isDirection ? students : students.filter((s) => (myClasses || []).includes(s.classe));
   const parClasse = CLASSES.map((c) => ({ classe: c, count: visible.filter((s) => s.classe === c).length })).filter((r) => r.count > 0);
   const parSexe = { Masculin: visible.filter((s) => s.sexe === "Masculin").length, Féminin: visible.filter((s) => s.sexe === "Féminin").length };
+
+  const classeStudents = visible.filter((s) => s.classe === classe);
+  const parSexeClasse = { Masculin: classeStudents.filter((s) => s.sexe === "Masculin").length, Féminin: classeStudents.filter((s) => s.sexe === "Féminin").length };
 
   return (
     <div>
       <SectionTitle sub="Nombre d'élèves inscrits, au total et par classe">Statistiques</SectionTitle>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 200px", background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "18px 22px" }}>
-          <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>Total des élèves</div>
-          <div style={{ fontSize: 28, fontFamily: "var(--heading-font)", color: "var(--primary)", marginTop: 6 }}>{visible.length}</div>
+      <div className="no-print" style={{ display: "flex", gap: 14, marginBottom: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setMode("ecole")} style={mode === "ecole" ? btnPrimary : btnSecondary}>Toute l'école</button>
+          <button onClick={() => setMode("classe")} style={mode === "classe" ? btnPrimary : btnSecondary}>Par classe</button>
         </div>
-        <div style={{ flex: "1 1 200px", background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "18px 22px" }}>
-          <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>Masculin</div>
-          <div style={{ fontSize: 28, fontFamily: "var(--heading-font)", color: "var(--primary)", marginTop: 6 }}>{parSexe.Masculin}</div>
-        </div>
-        <div style={{ flex: "1 1 200px", background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "18px 22px" }}>
-          <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>Féminin</div>
-          <div style={{ fontSize: 28, fontFamily: "var(--heading-font)", color: "var(--primary)", marginTop: 6 }}>{parSexe.Féminin}</div>
-        </div>
+        {mode === "classe" && (
+          <Field label="Classe">
+            <select style={inputStyle} value={classe} onChange={(e) => setClasse(e.target.value)}>
+              {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+        )}
+        <button onClick={() => window.print()} style={btnPrimary}><Printer size={16} /> Imprimer</button>
       </div>
 
-      <div style={{ fontSize: 13, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Élèves par classe</div>
-      {parClasse.length === 0 ? (
-        <EmptyState text="Aucun élève enregistré pour l'instant." />
+      <style>{`@media print {
+        .stats-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+        .stats-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+      }`}</style>
+
+      {mode === "ecole" ? (
+        <div className="print-area stats-print" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
+          <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title={`Statistiques — Toute l'école${academicYear ? ` · ${academicYear}` : ""}`} />
+
+          <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+            <StatCard label="Total des élèves" value={visible.length} />
+            <StatCard label="Masculin" value={parSexe.Masculin} />
+            <StatCard label="Féminin" value={parSexe.Féminin} />
+          </div>
+
+          <div style={{ fontSize: 13, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Élèves par classe</div>
+          {parClasse.length === 0 ? (
+            <div style={{ fontSize: 13.5, color: "#8B8578" }}>Aucun élève enregistré pour l'instant.</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead><tr style={{ borderBottom: "1.5px solid var(--primary)" }}><th style={{ ...thBulletin, textAlign: "left" }}>Classe</th><th style={thBulletin}>Nombre d'élèves</th></tr></thead>
+              <tbody>
+                {parClasse.map((r) => (
+                  <tr key={r.classe} style={{ borderBottom: "1px solid #EEE" }}>
+                    <td style={tdBulletin}>{r.classe}</td>
+                    <td style={{ ...tdBulletin, textAlign: "center" }}>{r.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       ) : (
-        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E1D6", overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-            <thead><tr style={{ background: "#F1EEE5", textAlign: "left" }}><th style={th}>Classe</th><th style={th}>Nombre d'élèves</th></tr></thead>
-            <tbody>
-              {parClasse.map((r) => (
-                <tr key={r.classe} style={{ borderTop: "1px solid #EEE" }}>
-                  <td style={td}>{r.classe}</td>
-                  <td style={td}>{r.count}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="print-area stats-print" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
+          <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title={`Statistiques — ${classe}${academicYear ? ` · ${academicYear}` : ""}`} />
+
+          <div style={{ display: "flex", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
+            <StatCard label={`Total — ${classe}`} value={classeStudents.length} />
+            <StatCard label="Masculin" value={parSexeClasse.Masculin} />
+            <StatCard label="Féminin" value={parSexeClasse.Féminin} />
+          </div>
+          {classeStudents.length === 0 && (
+            <div style={{ fontSize: 13.5, color: "#8B8578", marginTop: 8 }}>Aucun élève dans cette classe pour l'instant.</div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coefficients, schoolName, schoolLogo, schoolCode, academicYear, paperFormat }) {
+function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coefficients, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, academicYear, paperFormat }) {
   const [mode, setMode] = useState("classe"); // classe | ecole
   const [classe, setClasse] = useState(CLASSES[0]);
   const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
@@ -960,17 +1021,12 @@ function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coeff
         <button onClick={() => window.print()} style={btnPrimary}><Printer size={16} /> Imprimer</button>
       </div>
 
-      <style>{`@media print { .decision-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 18mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; } }`}</style>
+      <style>{`@media print {
+        .decision-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+        .decision-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+      }`}</style>
       <div className="print-area decision-print" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, borderBottom: "2px solid var(--primary)", paddingBottom: 14, marginBottom: 20 }}>
-          {schoolLogo ? <img src={schoolLogo} alt="Logo" style={{ width: 30, height: 30, borderRadius: 6, objectFit: "cover" }} /> : <School size={20} color="#A3272E" />}
-          <div>
-            <div style={{ fontFamily: "var(--heading-font)", fontSize: 16, color: "var(--primary)" }}>{schoolName}</div>
-            <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#A3272E", fontWeight: 600 }}>
-              Décision de fin d'année — {mode === "classe" ? classe : "Toute l'école"}{academicYear ? ` · ${academicYear}` : ""}
-            </div>
-          </div>
-        </div>
+        <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title={`Décision de fin d'année — ${mode === "classe" ? classe : "Toute l'école"}${academicYear ? ` · ${academicYear}` : ""}`} />
 
         {rows.length === 0 ? (
           <div style={{ fontSize: 13.5, color: "#8B8578" }}>Aucun élève à afficher.</div>
@@ -994,7 +1050,7 @@ function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coeff
                   {mode === "ecole" && <td style={tdBulletin}>{s.classe}</td>}
                   <td style={{ ...tdBulletin, textAlign: "center" }}>{s.sexe || "—"}</td>
                   <td style={{ ...tdBulletin, textAlign: "center" }}>{moyenne !== null ? moyenne.toFixed(1) : "—"}</td>
-                  <td style={{ ...tdBulletin, textAlign: "center", fontWeight: 600, color: mention === "Réussi(e)" ? "#3D6B4F" : mention === "Échoué(e)" ? "#A3272E" : "#8B8578" }}>{mention}</td>
+                  <td className="keep-color" style={{ ...tdBulletin, textAlign: "center", fontWeight: 600, color: mention === "Réussi(e)" ? "#3D6B4F" : mention === "Échoué(e)" ? "#A3272E" : "#8B8578" }}>{mention}</td>
                 </tr>
               ))}
             </tbody>
@@ -1005,7 +1061,7 @@ function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coeff
   );
 }
 
-function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment, onRemovePayment, schoolName, schoolLogo, schoolCode, paperFormat, isDirection, paramsPassword }) {
+function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment, onRemovePayment, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, isDirection, paramsPassword }) {
   const [mode, setMode] = useState("eleve"); // eleve | classe
   const [filter, setFilter] = useState("");
   const [studentId, setStudentId] = useState(students[0]?.id || "");
@@ -1079,15 +1135,12 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
                 <button onClick={() => window.print()} style={btnPrimary}><Printer size={16} /> Imprimer l'état de paiement</button>
               </div>
 
-              <style>{`@media print { .payment-state { width: ${paper.width} !important; min-height: ${paper.height}; padding: 18mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; } }`}</style>
+              <style>{`@media print {
+                .payment-state { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+                .payment-state *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+              }`}</style>
               <div className="print-area payment-state" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, borderBottom: "2px solid var(--primary)", paddingBottom: 14, marginBottom: 20 }}>
-                  {schoolLogo ? <img src={schoolLogo} alt="Logo" style={{ width: 30, height: 30, borderRadius: 6, objectFit: "cover" }} /> : <School size={20} color="#A3272E" />}
-                  <div>
-                    <div style={{ fontFamily: "var(--heading-font)", fontSize: 16, color: "var(--primary)" }}>{schoolName}</div>
-                    <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#A3272E", fontWeight: 600 }}>État de paiement</div>
-                  </div>
-                </div>
+                <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="État de paiement" />
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px", fontSize: 14, marginBottom: 20 }}>
                   <div><strong>Matricule :</strong> {formatMatricule(student.nom, student.prenom, student.matriculeNum)}</div>
@@ -1111,7 +1164,7 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F1EEE5", borderRadius: 8, padding: "12px 16px", marginBottom: 24 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>Total général</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: totalBalance > 0 ? "#A3272E" : "#3D6B4F" }}>
+                  <div className="keep-color" style={{ fontSize: 15, fontWeight: 700, color: totalBalance > 0 ? "#A3272E" : "#3D6B4F" }}>
                     {formatMoney(totalPaid, currency)} payé — solde {formatMoney(Math.max(0, totalBalance), currency)}
                   </div>
                 </div>
@@ -1191,7 +1244,7 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
       {mode === "classe" && (
         <ClassePaymentReport
           students={students} payments={payments} tuitionFees={tuitionFees} currency={currency}
-          schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} paperFormat={paperFormat}
+          schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat}
           classe={classeReport} setClasse={setClasseReport}
         />
       )}
@@ -1203,12 +1256,12 @@ function FeeBox({ label, value, color }) {
   return (
     <div style={{ flex: 1, background: "#F1EEE5", borderRadius: 8, padding: "10px 14px" }}>
       <div style={{ fontSize: 10.5, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 14, fontFamily: "var(--heading-font)", color: color || "var(--primary)", marginTop: 3 }}>{value}</div>
+      <div className={color ? "keep-color" : undefined} style={{ fontSize: 14, fontFamily: "var(--heading-font)", color: color || "var(--primary)", marginTop: 3 }}>{value}</div>
     </div>
   );
 }
 
-function ClassePaymentReport({ students, payments, tuitionFees, currency, schoolName, schoolLogo, schoolCode, paperFormat, classe, setClasse }) {
+function ClassePaymentReport({ students, payments, tuitionFees, currency, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, classe, setClasse }) {
   const classStudents = students.filter((s) => s.classe === classe).sort((a, b) => a.nom.localeCompare(b.nom));
   const fee = (tuitionFees[classe]?.inscription || 0) + (tuitionFees[classe]?.scolarite || 0);
   const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
@@ -1231,15 +1284,12 @@ function ClassePaymentReport({ students, payments, tuitionFees, currency, school
         <button onClick={() => window.print()} style={btnPrimary}><Printer size={16} /> Imprimer l'état de la classe</button>
       </div>
 
-      <style>{`@media print { .classe-payment-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 18mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; } }`}</style>
+      <style>{`@media print {
+        .classe-payment-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+        .classe-payment-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+      }`}</style>
       <div className="print-area classe-payment-print" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, borderBottom: "2px solid var(--primary)", paddingBottom: 14, marginBottom: 20 }}>
-          {schoolLogo ? <img src={schoolLogo} alt="Logo" style={{ width: 30, height: 30, borderRadius: 6, objectFit: "cover" }} /> : <School size={20} color="#A3272E" />}
-          <div>
-            <div style={{ fontFamily: "var(--heading-font)", fontSize: 16, color: "var(--primary)" }}>{schoolName}</div>
-            <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#A3272E", fontWeight: 600 }}>État de paiement — {classe}</div>
-          </div>
-        </div>
+        <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title={`État de paiement — ${classe}`} />
 
         <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
           <div style={{ flex: 1, background: "#F1EEE5", borderRadius: 8, padding: "12px 16px" }}>
@@ -1248,11 +1298,11 @@ function ClassePaymentReport({ students, payments, tuitionFees, currency, school
           </div>
           <div style={{ flex: 1, background: "#F1EEE5", borderRadius: 8, padding: "12px 16px" }}>
             <div style={{ fontSize: 11, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>Total encaissé</div>
-            <div style={{ fontSize: 16, fontFamily: "var(--heading-font)", color: "#3D6B4F", marginTop: 4 }}>{formatMoney(totalPaid, currency)}</div>
+            <div className="keep-color" style={{ fontSize: 16, fontFamily: "var(--heading-font)", color: "#3D6B4F", marginTop: 4 }}>{formatMoney(totalPaid, currency)}</div>
           </div>
           <div style={{ flex: 1, background: "#F1EEE5", borderRadius: 8, padding: "12px 16px" }}>
             <div style={{ fontSize: 11, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>Total restant dû</div>
-            <div style={{ fontSize: 16, fontFamily: "var(--heading-font)", color: totalDue > 0 ? "#A3272E" : "#3D6B4F", marginTop: 4 }}>{formatMoney(totalDue, currency)}</div>
+            <div className="keep-color" style={{ fontSize: 16, fontFamily: "var(--heading-font)", color: totalDue > 0 ? "#A3272E" : "#3D6B4F", marginTop: 4 }}>{formatMoney(totalDue, currency)}</div>
           </div>
         </div>
 
@@ -1276,7 +1326,7 @@ function ClassePaymentReport({ students, payments, tuitionFees, currency, school
                   <td style={tdBulletin}>{s.nom} {s.prenom}</td>
                   <td style={{ ...tdBulletin, textAlign: "center" }}>{formatMoney(paid, currency)}</td>
                   <td style={{ ...tdBulletin, textAlign: "center" }}>{formatMoney(Math.max(0, balance), currency)}</td>
-                  <td style={{ ...tdBulletin, textAlign: "center", fontWeight: 600, color: statutColor[statut] }}>{statut}</td>
+                  <td className="keep-color" style={{ ...tdBulletin, textAlign: "center", fontWeight: 600, color: statutColor[statut] }}>{statut}</td>
                 </tr>
               ))}
             </tbody>
@@ -1406,6 +1456,8 @@ function MainApp({ profile }) {
   const [schoolCode, setSchoolCodeState] = useState("");
   const [schoolLogo, setSchoolLogoState] = useState("");
   const [backgroundPhoto, setBackgroundPhotoState] = useState("");
+  const [schoolAddress, setSchoolAddressState] = useState("");
+  const [schoolPhone, setSchoolPhoneState] = useState("");
   const [academicYear, setAcademicYearState] = useState("");
   const [currency, setCurrencyState] = useState("HTG");
   const [themeColor, setThemeColorState] = useState("#1B2A4A");
@@ -1443,6 +1495,8 @@ function MainApp({ profile }) {
     setSchoolCodeState(s.code || "");
     setSchoolLogoState(s.logo || "");
     setBackgroundPhotoState(s.background_photo || "");
+    setSchoolAddressState(s.address || "");
+    setSchoolPhoneState(s.phone || "");
     setAcademicYearState(s.academic_year || "");
     setCurrencyState(s.currency || "HTG");
     setThemeColorState(s.theme_color || "#1B2A4A");
@@ -1498,6 +1552,8 @@ function MainApp({ profile }) {
   const setSchoolCode = (v) => updateSchool({ code: v });
   const setSchoolLogo = (v) => updateSchool({ logo: v });
   const setBackgroundPhoto = (v) => updateSchool({ background_photo: v });
+  const setSchoolAddress = (v) => updateSchool({ address: v });
+  const setSchoolPhone = (v) => updateSchool({ phone: v });
   const setAcademicYear = (v) => updateSchool({ academic_year: v });
   const setCurrency = (v) => updateSchool({ currency: v });
   const setThemeColor = (v) => updateSchool({ theme_color: v });
@@ -1677,22 +1733,22 @@ function MainApp({ profile }) {
 
       <main style={{ flex: 1, padding: "40px 48px", maxWidth: 1100 }}>
         {effectiveTab === "eleves" && !isEnseignant && (
-          <ElevesView students={students} onAdd={addStudent} onUpdate={updateStudent} onRemove={removeStudent} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} paperFormat={paperFormat} paramsPassword={paramsPassword} />
+          <ElevesView students={students} onAdd={addStudent} onUpdate={updateStudent} onRemove={removeStudent} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} paramsPassword={paramsPassword} />
         )}
         {effectiveTab === "notes" && (
           <NotesView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} mentions={mentions} coefficients={coefficients} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} onSetScore={setScore} onSetMention={setMention} paramsPassword={paramsPassword} />
         )}
         {effectiveTab === "bulletins" && !isEnseignant && (
-          <BulletinsView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} mentions={mentions} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} academicYear={academicYear} coefficients={coefficients} remarks={remarks} onSetRemark={setRemark} paperFormat={paperFormat} />
+          <BulletinsView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} mentions={mentions} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} academicYear={academicYear} coefficients={coefficients} remarks={remarks} onSetRemark={setRemark} paperFormat={paperFormat} />
         )}
         {effectiveTab === "statistiques" && !isEnseignant && (
-          <StatistiquesView students={students} isDirection={isDirection || isSecretaire} myClasses={myClasses} />
+          <StatistiquesView students={students} isDirection={isDirection || isSecretaire} myClasses={myClasses} schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} academicYear={academicYear} paperFormat={paperFormat} />
         )}
         {effectiveTab === "paiements" && (isDirection || isSecretaire) && (
-          <PaiementsView students={students} payments={payments} tuitionFees={tuitionFees} currency={currency} onAddPayment={addPayment} onRemovePayment={removePayment} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} paperFormat={paperFormat} isDirection={isDirection} paramsPassword={paramsPassword} />
+          <PaiementsView students={students} payments={payments} tuitionFees={tuitionFees} currency={currency} onAddPayment={addPayment} onRemovePayment={removePayment} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} isDirection={isDirection} paramsPassword={paramsPassword} />
         )}
         {effectiveTab === "decision" && isDirection && (
-          <DecisionFinAnneeView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} coefficients={coefficients} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} academicYear={academicYear} paperFormat={paperFormat} />
+          <DecisionFinAnneeView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} coefficients={coefficients} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} academicYear={academicYear} paperFormat={paperFormat} />
         )}
         {effectiveTab === "utilisateurs" && isDirection && (
           <UtilisateursView users={users} currentUserId={profile.id} onAdd={addUser} onUpdateRole={updateUserRole} onRemove={removeUser} />
@@ -1704,6 +1760,8 @@ function MainApp({ profile }) {
               schoolCode={schoolCode} setSchoolCode={setSchoolCode}
               schoolLogo={schoolLogo} setSchoolLogo={setSchoolLogo}
               backgroundPhoto={backgroundPhoto} setBackgroundPhoto={setBackgroundPhoto}
+              schoolAddress={schoolAddress} setSchoolAddress={setSchoolAddress}
+              schoolPhone={schoolPhone} setSchoolPhone={setSchoolPhone}
               academicYear={academicYear} setAcademicYear={setAcademicYear}
               currency={currency} setCurrency={setCurrency}
               subjects={subjects} setSubjects={setSubjects}
@@ -1830,6 +1888,7 @@ function UserRow({ user, isSelf, onUpdateRole, onRemove }) {
 function ParametresView({
   schoolName, setSchoolName, schoolCode, setSchoolCode, schoolLogo, setSchoolLogo,
   backgroundPhoto, setBackgroundPhoto,
+  schoolAddress, setSchoolAddress, schoolPhone, setSchoolPhone,
   academicYear, setAcademicYear, currency, setCurrency,
   subjects, setSubjects, classSubjects, setClassSubjects,
   coefficients, setCoefficients, tuitionFees, setTuitionFee,
@@ -1838,6 +1897,8 @@ function ParametresView({
 }) {
   const [name, setName] = useState(schoolName);
   const [code, setCode] = useState(schoolCode);
+  const [address, setAddress] = useState(schoolAddress);
+  const [phone, setPhone] = useState(schoolPhone);
   const [year, setYear] = useState(academicYear);
   const [curr, setCurr] = useState(currency);
   const [newSubject, setNewSubject] = useState("");
@@ -1955,6 +2016,23 @@ function ParametresView({
         <div style={{ display: "flex", gap: 10 }}>
           <input style={{ ...inputStyle, maxWidth: 160 }} placeholder="ex: SJB" value={code} onChange={(e) => setCode(e.target.value)} />
           <button style={btnPrimary} onClick={() => setSchoolCode(code)}>Enregistrer</button>
+        </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Adresse de l'école</div>
+        <div style={{ fontSize: 12.5, color: "#8B8578", marginBottom: 14 }}>Affichée sous le nom de l'école sur les documents imprimés (bulletin, fiche technique, état de paiement, décision de fin d'année).</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input style={inputStyle} placeholder="ex: Rue Principale, Thomassique" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <button style={btnPrimary} onClick={() => setSchoolAddress(address)}>Enregistrer</button>
+        </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Téléphone de l'école</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input style={{ ...inputStyle, maxWidth: 220 }} placeholder="ex: +509 1234 5678" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <button style={btnPrimary} onClick={() => setSchoolPhone(phone)}>Enregistrer</button>
         </div>
       </div>
 
