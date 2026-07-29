@@ -793,12 +793,14 @@ function BulletinsView({ students, subjects, classSubjects, grades, mentions, sc
         <div className="print-area bulletin-print-area" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "44px 52px", maxWidth: 720, boxShadow: "0 1px 3px rgba(27,42,74,0.06)" }}>
           <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="Bulletin Scolaire" logoSize={44} nameSize={22} titleSize={12.5} titleLetterSpacing={1.5} marginBottom={24} />
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px", fontSize: 14, marginBottom: 10 }}>
-            <div><strong>Matricule :</strong> {formatMatricule(student.nom, student.prenom, student.matriculeNum)}</div>
-            <div><strong>Classe :</strong> {student.classe}</div>
+          <div style={{ display: "flex", gap: 24, fontSize: 14, marginBottom: 6, flexWrap: "wrap" }}>
             <div><strong>Nom :</strong> {student.nom}</div>
             <div><strong>Prénom :</strong> {student.prenom || "—"}</div>
             <div><strong>Sexe :</strong> {student.sexe || "—"}</div>
+          </div>
+          <div style={{ display: "flex", gap: 24, fontSize: 14, marginBottom: 10, flexWrap: "wrap" }}>
+            <div><strong>Matricule :</strong> {formatMatricule(student.nom, student.prenom, student.matriculeNum)}</div>
+            <div><strong>Classe :</strong> {student.classe}</div>
           </div>
           <div style={{ display: "flex", gap: 24, fontSize: 14, marginBottom: 28, flexWrap: "wrap", borderTop: "1px dashed #E5E1D6", paddingTop: 10 }}>
             <div><strong>Année académique :</strong> {academicYear || "—"}</div>
@@ -1143,9 +1145,9 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
                 <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="État de paiement" />
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px", fontSize: 14, marginBottom: 20 }}>
+                  <div style={{ gridColumn: "1 / -1" }}><strong>Élève :</strong> {student.nom} {student.prenom}</div>
                   <div><strong>Matricule :</strong> {formatMatricule(student.nom, student.prenom, student.matriculeNum)}</div>
                   <div><strong>Classe :</strong> {student.classe}</div>
-                  <div style={{ gridColumn: "1 / -1" }}><strong>Élève :</strong> {student.nom} {student.prenom}</div>
                 </div>
 
                 <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Frais d'inscription</div>
