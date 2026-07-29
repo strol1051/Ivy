@@ -303,7 +303,7 @@ function Sidebar({ tab, setTab, schoolName, schoolLogo, currentUser, onLogout, i
 // séparation, puis titre du document en gras/majuscules. Les classes
 // "doc-header" et "doc-title" servent d'accroche pour le CSS d'impression
 // (en-tête en couleur, reste du document en noir et blanc).
-function DocHeader({ schoolLogo, schoolName, schoolAddress, schoolPhone, title, logoSize = 30, nameSize = 16, titleSize = 11, titleLetterSpacing = 1, marginBottom = 20 }) {
+function DocHeader({ schoolLogo, schoolName, schoolAddress, schoolPhone, title, logoSize = 48, nameSize = 16, titleSize = 11, titleLetterSpacing = 1, marginBottom = 20 }) {
   return (
     <>
       <div className="doc-header" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, borderBottom: "2px solid var(--primary)", paddingBottom: 14 }}>
@@ -791,7 +791,7 @@ function BulletinsView({ students, subjects, classSubjects, grades, mentions, sc
           }
         `}</style>
         <div className="print-area bulletin-print-area" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "44px 52px", maxWidth: 720, boxShadow: "0 1px 3px rgba(27,42,74,0.06)" }}>
-          <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="Bulletin Scolaire" logoSize={44} nameSize={22} titleSize={12.5} titleLetterSpacing={1.5} marginBottom={24} />
+          <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="Bulletin Scolaire" logoSize={64} nameSize={22} titleSize={12.5} titleLetterSpacing={1.5} marginBottom={24} />
 
           <div style={{ display: "flex", gap: 24, fontSize: 14, marginBottom: 6, flexWrap: "wrap" }}>
             <div><strong>Nom :</strong> {student.nom}</div>
@@ -1611,6 +1611,16 @@ function MainApp({ profile }) {
     );
     loadAll();
   };
+  // Enregistre les deux montants (inscription + scolarité) en une seule fois,
+  // pour éviter que deux appels successifs à setTuitionFee ne s'écrasent l'un
+  // l'autre (chacun se basant sur l'état encore non rafraîchi).
+  const setTuitionFeesBoth = async (classe, inscription, scolarite) => {
+    await supabase.from("tuition_fees").upsert(
+      { school_id: schoolId, classe, inscription, scolarite },
+      { onConflict: "school_id,classe" }
+    );
+    loadAll();
+  };
 
   // ---- Élèves ----
   const addStudent = async (form) => {
@@ -1769,7 +1779,7 @@ function MainApp({ profile }) {
               subjects={subjects} setSubjects={setSubjects}
               classSubjects={classSubjects} setClassSubjects={setClassSubjects}
               coefficients={coefficients} setCoefficients={setCoefficients}
-              tuitionFees={tuitionFees} setTuitionFee={setTuitionFee}
+              tuitionFees={tuitionFees} setTuitionFee={setTuitionFee} setTuitionFeesBoth={setTuitionFeesBoth}
               themeColor={themeColor} setThemeColor={setThemeColor}
               themeStyle={themeStyle} setThemeStyle={setThemeStyle}
               paperFormat={paperFormat} setPaperFormat={setPaperFormat}
@@ -1893,7 +1903,7 @@ function ParametresView({
   schoolAddress, setSchoolAddress, schoolPhone, setSchoolPhone,
   academicYear, setAcademicYear, currency, setCurrency,
   subjects, setSubjects, classSubjects, setClassSubjects,
-  coefficients, setCoefficients, tuitionFees, setTuitionFee,
+  coefficients, setCoefficients, tuitionFees, setTuitionFee, setTuitionFeesBoth,
   themeColor, setThemeColor, themeStyle, setThemeStyle,
   paperFormat, setPaperFormat, paramsPassword, setParamsPassword,
 }) {
@@ -1906,6 +1916,28 @@ function ParametresView({
   const [newSubject, setNewSubject] = useState("");
   const [coeffClasse, setCoeffClasse] = useState(CLASSES[0]);
   const [feeClasse, setFeeClasse] = useState(CLASSES[0]);
+  const [feeDraft, setFeeDraft] = useState({ inscription: "", scolarite: "" });
+  const [feeSaved, setFeeSaved] = useState(false);
+
+  useEffect(() => {
+    const current = tuitionFees[feeClasse] || {};
+    setFeeDraft({
+      inscription: current.inscription ? String(current.inscription) : "",
+      scolarite: current.scolarite ? String(current.scolarite) : "",
+    });
+    setFeeSaved(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeClasse]);
+
+  const saveFees = () => {
+    setTuitionFeesBoth(
+      feeClasse,
+      feeDraft.inscription === "" ? 0 : Math.max(0, Number(feeDraft.inscription) || 0),
+      feeDraft.scolarite === "" ? 0 : Math.max(0, Number(feeDraft.scolarite) || 0)
+    );
+    setFeeSaved(true);
+    setTimeout(() => setFeeSaved(false), 2000);
+  };
   const [subjClasse, setSubjClasse] = useState(CLASSES[0]);
   const [logoError, setLogoError] = useState("");
   const [bgError, setBgError] = useState("");
@@ -2158,18 +2190,22 @@ function ParametresView({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16, maxWidth: 420 }}>
           <Field label="Frais d'inscription">
             <input
-              type="number" min="0" style={inputStyle}
-              value={tuitionFees[feeClasse]?.inscription ?? 0}
-              onChange={(e) => setTuitionFee(feeClasse, "inscription", Math.max(0, Number(e.target.value) || 0))}
+              type="text" inputMode="numeric" style={inputStyle} placeholder="Montant"
+              value={feeDraft.inscription}
+              onChange={(e) => setFeeDraft({ ...feeDraft, inscription: e.target.value.replace(/[^0-9]/g, "") })}
             />
           </Field>
           <Field label="Frais de scolarité">
             <input
-              type="number" min="0" style={inputStyle}
-              value={tuitionFees[feeClasse]?.scolarite ?? 0}
-              onChange={(e) => setTuitionFee(feeClasse, "scolarite", Math.max(0, Number(e.target.value) || 0))}
+              type="text" inputMode="numeric" style={inputStyle} placeholder="Montant"
+              value={feeDraft.scolarite}
+              onChange={(e) => setFeeDraft({ ...feeDraft, scolarite: e.target.value.replace(/[^0-9]/g, "") })}
             />
           </Field>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 16 }}>
+          <button style={btnPrimary} onClick={saveFees}>Enregistrer</button>
+          {feeSaved && <span style={{ fontSize: 12.5, color: "#3D6B4F", fontWeight: 600 }}>Montants enregistrés ✓</span>}
         </div>
       </div>
 
