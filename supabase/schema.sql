@@ -142,6 +142,7 @@ create table if not exists tuition_fees (
   classe text not null,
   inscription numeric not null default 0,
   scolarite numeric not null default 0,
+  entree numeric not null default 0,
   unique (school_id, classe)
 );
 

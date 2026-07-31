@@ -12,7 +12,7 @@ const KIND_CLASSES = ["Kind 1", "Kind 2", "Kind 3"];
 const MOYENNE_SUR_10_CLASSES = ["1ère AF", "2ème AF", "3ème AF", "4ème AF", "5ème AF", "6ème AF"];
 const MENTIONS = ["Excellent", "Très bien", "Bien", "Absent", "Souvent", "Rarement", "Parfois", "Jamais", "Insuffisant"];
 const LOCALITES = ["Thomassique (Centre-Ville)", "1ère Section (Lociane)", "2ème Section (Matelgate)"];
-const LIBELLES_PAIEMENT = ["Frais d'inscription", "1er Trimestre", "2ème Trimestre", "3ème Trimestre"];
+const LIBELLES_PAIEMENT = ["Frais d'entrée", "Frais d'inscription", "1er Trimestre", "2ème Trimestre", "3ème Trimestre"];
 const PAPER_FORMATS = { A4: { width: "210mm", height: "297mm" }, Lettre: { width: "215.9mm", height: "279.4mm" } };
 const THEME_PRESETS = [
   { name: "Bleu Marine", color: "#1B2A4A" },
@@ -1076,12 +1076,14 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
   );
   const student = students.find((s) => s.id === studentId);
   const studentPayments = payments.filter((p) => p.studentId === studentId);
+  const entreeFee = student ? (tuitionFees[student.classe]?.entree || 0) : 0;
   const inscriptionFee = student ? (tuitionFees[student.classe]?.inscription || 0) : 0;
   const scolariteFee = student ? (tuitionFees[student.classe]?.scolarite || 0) : 0;
+  const entreePaid = studentPayments.filter((p) => p.label === "Frais d'entrée").reduce((a, p) => a + p.amount, 0);
   const inscriptionPaid = studentPayments.filter((p) => p.label === "Frais d'inscription").reduce((a, p) => a + p.amount, 0);
-  const scolaritePaid = studentPayments.filter((p) => p.label !== "Frais d'inscription").reduce((a, p) => a + p.amount, 0);
-  const totalFee = inscriptionFee + scolariteFee;
-  const totalPaid = inscriptionPaid + scolaritePaid;
+  const scolaritePaid = studentPayments.filter((p) => p.label !== "Frais d'entrée" && p.label !== "Frais d'inscription").reduce((a, p) => a + p.amount, 0);
+  const totalFee = entreeFee + inscriptionFee + scolariteFee;
+  const totalPaid = entreePaid + inscriptionPaid + scolaritePaid;
   const totalBalance = totalFee - totalPaid;
 
   const submit = () => {
@@ -1112,7 +1114,7 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
             <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E1D6", maxHeight: 480, overflowY: "auto" }}>
               {filtered.map((s) => {
                 const sPaid = payments.filter((p) => p.studentId === s.id).reduce((a, p) => a + p.amount, 0);
-                const sFee = (tuitionFees[s.classe]?.inscription || 0) + (tuitionFees[s.classe]?.scolarite || 0);
+                const sFee = (tuitionFees[s.classe]?.entree || 0) + (tuitionFees[s.classe]?.inscription || 0) + (tuitionFees[s.classe]?.scolarite || 0);
                 const due = sFee - sPaid;
                 const active = s.id === studentId;
                 return (
@@ -1148,6 +1150,13 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
                   <div style={{ gridColumn: "1 / -1" }}><strong>Élève :</strong> {student.nom} {student.prenom}</div>
                   <div><strong>Matricule :</strong> {formatMatricule(student.nom, student.prenom, student.matriculeNum)}</div>
                   <div><strong>Classe :</strong> {student.classe}</div>
+                </div>
+
+                <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Frais d'entrée</div>
+                <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
+                  <FeeBox label="Frais" value={formatMoney(entreeFee, currency)} />
+                  <FeeBox label="Payé" value={formatMoney(entreePaid, currency)} color="#3D6B4F" />
+                  <FeeBox label="Solde" value={formatMoney(Math.max(0, entreeFee - entreePaid), currency)} color={entreeFee - entreePaid > 0 ? "#A3272E" : "#3D6B4F"} />
                 </div>
 
                 <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Frais d'inscription</div>
@@ -1265,7 +1274,7 @@ function FeeBox({ label, value, color }) {
 
 function ClassePaymentReport({ students, payments, tuitionFees, currency, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, classe, setClasse }) {
   const classStudents = students.filter((s) => s.classe === classe).sort((a, b) => a.nom.localeCompare(b.nom));
-  const fee = (tuitionFees[classe]?.inscription || 0) + (tuitionFees[classe]?.scolarite || 0);
+  const fee = (tuitionFees[classe]?.entree || 0) + (tuitionFees[classe]?.inscription || 0) + (tuitionFees[classe]?.scolarite || 0);
   const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
   const rows = classStudents.map((s) => {
     const paid = payments.filter((p) => p.studentId === s.id).reduce((a, p) => a + p.amount, 0);
@@ -1530,7 +1539,7 @@ function MainApp({ profile }) {
     setCoefficientsState(cMap);
 
     const fMap = {};
-    (feesRes.data || []).forEach((r) => { fMap[r.classe] = { inscription: Number(r.inscription), scolarite: Number(r.scolarite) }; });
+    (feesRes.data || []).forEach((r) => { fMap[r.classe] = { inscription: Number(r.inscription), scolarite: Number(r.scolarite), entree: Number(r.entree || 0) }; });
     setTuitionFeesState(fMap);
 
     setPayments((paymentsRes.data || []).map((r) => ({
@@ -1611,12 +1620,13 @@ function MainApp({ profile }) {
     );
     loadAll();
   };
-  // Enregistre les deux montants (inscription + scolarité) en une seule fois,
-  // pour éviter que deux appels successifs à setTuitionFee ne s'écrasent l'un
-  // l'autre (chacun se basant sur l'état encore non rafraîchi).
-  const setTuitionFeesBoth = async (classe, inscription, scolarite) => {
+  // Enregistre les trois montants (frais d'entrée + inscription + scolarité)
+  // en une seule fois, pour éviter que des appels successifs à setTuitionFee
+  // ne s'écrasent l'un l'autre (chacun se basant sur l'état encore non
+  // rafraîchi).
+  const setTuitionFeesBoth = async (classe, inscription, scolarite, entree) => {
     await supabase.from("tuition_fees").upsert(
-      { school_id: schoolId, classe, inscription, scolarite },
+      { school_id: schoolId, classe, inscription, scolarite, entree },
       { onConflict: "school_id,classe" }
     );
     loadAll();
@@ -1916,7 +1926,7 @@ function ParametresView({
   const [newSubject, setNewSubject] = useState("");
   const [coeffClasse, setCoeffClasse] = useState(CLASSES[0]);
   const [feeClasse, setFeeClasse] = useState(CLASSES[0]);
-  const [feeDraft, setFeeDraft] = useState({ inscription: "", scolarite: "" });
+  const [feeDraft, setFeeDraft] = useState({ inscription: "", scolarite: "", entree: "" });
   const [feeSaved, setFeeSaved] = useState(false);
 
   useEffect(() => {
@@ -1924,6 +1934,7 @@ function ParametresView({
     setFeeDraft({
       inscription: current.inscription ? String(current.inscription) : "",
       scolarite: current.scolarite ? String(current.scolarite) : "",
+      entree: current.entree ? String(current.entree) : "",
     });
     setFeeSaved(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1933,7 +1944,8 @@ function ParametresView({
     setTuitionFeesBoth(
       feeClasse,
       feeDraft.inscription === "" ? 0 : Math.max(0, Number(feeDraft.inscription) || 0),
-      feeDraft.scolarite === "" ? 0 : Math.max(0, Number(feeDraft.scolarite) || 0)
+      feeDraft.scolarite === "" ? 0 : Math.max(0, Number(feeDraft.scolarite) || 0),
+      feeDraft.entree === "" ? 0 : Math.max(0, Number(feeDraft.entree) || 0)
     );
     setFeeSaved(true);
     setTimeout(() => setFeeSaved(false), 2000);
@@ -2187,7 +2199,14 @@ function ParametresView({
             {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16, maxWidth: 420 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 16, maxWidth: 620 }}>
+          <Field label="Frais d'entrée">
+            <input
+              type="text" inputMode="numeric" style={inputStyle} placeholder="Montant"
+              value={feeDraft.entree}
+              onChange={(e) => setFeeDraft({ ...feeDraft, entree: e.target.value.replace(/[^0-9]/g, "") })}
+            />
+          </Field>
           <Field label="Frais d'inscription">
             <input
               type="text" inputMode="numeric" style={inputStyle} placeholder="Montant"
