@@ -1462,6 +1462,54 @@ function RapportView({ students, payments, currency, schoolName, schoolLogo, sch
 // ============================================================
 // App racine — session Supabase, puis Connexion ou Application
 // ============================================================
+// ============================================================
+// Page publique de téléchargement de l'application de bureau (ivy-desktop).
+// Accessible sans connexion, à l'adresse /telecharger — lien à partager
+// directement avec une école, où qu'elle soit.
+// ============================================================
+function DownloadPage() {
+  return (
+    <div style={{ minHeight: "100vh", background: "#1B2A4A", fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#F7F5F0", borderRadius: 14, padding: "44px 40px", width: 480, maxWidth: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.3)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
+          <img src="/icon-192.png" alt="Ivy1.0" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
+          <div style={{ fontFamily: "Georgia, serif", fontSize: 21, color: "#1B2A4A" }}>Ivy1.0 — Application de bureau</div>
+        </div>
+
+        <p style={{ fontSize: 14, color: "#3A3A3A", lineHeight: 1.6, marginBottom: 24 }}>
+          Cette application installe une fenêtre Ivy1.0 sur ton ordinateur Windows,
+          sans avoir besoin d'ouvrir un navigateur — juste une icône sur le bureau.
+        </p>
+
+        <a
+          href="/Ivy1.0-Setup.exe"
+          download
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+            background: "#1B2A4A", color: "white", textDecoration: "none",
+            padding: "14px 20px", borderRadius: 10, fontSize: 15, fontWeight: 600,
+            marginBottom: 20,
+          }}
+        >
+          Télécharger pour Windows
+        </a>
+
+        <div style={{ background: "#EFE9DA", borderRadius: 8, padding: "14px 16px", fontSize: 13, color: "#6B6355", lineHeight: 1.6 }}>
+          <strong>À savoir avant d'installer :</strong> à la première ouverture,
+          Windows affichera probablement un écran bleu « Windows a protégé votre
+          ordinateur » — c'est normal pour tout logiciel non signé numériquement.
+          Clique sur <strong>Informations complémentaires</strong>, puis <strong>Exécuter
+          quand même</strong> pour continuer l'installation.
+        </div>
+
+        <div style={{ fontSize: 12, color: "#8B8578", marginTop: 20, textAlign: "center" }}>
+          Une fois installé, connecte-toi avec l'email et le mot de passe fournis par l'éditeur du logiciel.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(null);
@@ -1491,6 +1539,12 @@ export default function App() {
     if (session) loadProfile(session.user.id);
     else { setProfile(null); setProfileError(""); }
   }, [session, loadProfile]);
+
+  // Page publique de téléchargement de l'application de bureau — accessible
+  // sans connexion, à n'importe qui ayant le lien direct.
+  if (typeof window !== "undefined" && window.location.pathname.replace(/\/$/, "") === "/telecharger") {
+    return <DownloadPage />;
+  }
 
   if (session === undefined || loadingProfile) return <Centered>Chargement…</Centered>;
   if (!session) return <AuthScreen />;
