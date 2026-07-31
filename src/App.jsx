@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { Users, ClipboardList, FileText, Settings, Plus, Trash2, Printer, X, School, UserCog, LogOut, Wallet } from "lucide-react";
+import { Users, ClipboardList, FileText, Settings, Plus, Trash2, Printer, X, School, UserCog, LogOut, Wallet, Calendar } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 const CLASSES = [
@@ -1349,6 +1349,117 @@ function ClassePaymentReport({ students, payments, tuitionFees, currency, school
 }
 
 // ============================================================
+// Rapport d'activité par date (réservé à la Direction) : liste tous les
+// paiements enregistrés et tous les élèves inscrits sur une période donnée,
+// pour un contrôle facile — imprimable.
+// ============================================================
+function RapportView({ students, payments, currency, schoolName, schoolLogo, schoolAddress, schoolPhone, paperFormat }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [dateDebut, setDateDebut] = useState(today);
+  const [dateFin, setDateFin] = useState(today);
+  const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
+
+  const dansPeriode = (dateStr) => dateStr && dateStr >= dateDebut && dateStr <= dateFin;
+
+  const paiementsPeriode = payments
+    .filter((p) => dansPeriode(p.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const inscriptionsPeriode = students
+    .filter((s) => s.createdAt && dansPeriode(s.createdAt.slice(0, 10)))
+    .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+
+  const totalEncaisse = paiementsPeriode.reduce((a, p) => a + p.amount, 0);
+  const studentById = (id) => students.find((s) => s.id === id);
+
+  const periodeLabel = dateDebut === dateFin ? dateDebut : `${dateDebut} au ${dateFin}`;
+
+  return (
+    <div>
+      <SectionTitle sub="Historique des paiements et des inscriptions d'élèves sur une période, pour contrôle">Rapport d'activité</SectionTitle>
+
+      <div className="no-print" style={{ display: "flex", gap: 14, marginBottom: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <Field label="Du"><input type="date" style={inputStyle} value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} /></Field>
+        <Field label="Au"><input type="date" style={inputStyle} value={dateFin} onChange={(e) => setDateFin(e.target.value)} /></Field>
+        <button onClick={() => window.print()} style={btnPrimary}><Printer size={16} /> Imprimer</button>
+      </div>
+
+      <style>{`@media print {
+        .rapport-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+        .rapport-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+      }`}</style>
+
+      <div className="print-area rapport-print" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
+        <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title={`Rapport d'activité — ${periodeLabel}`} />
+
+        <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+          <StatCard label="Paiements enregistrés" value={paiementsPeriode.length} />
+          <StatCard label="Total encaissé" value={formatMoney(totalEncaisse, currency)} />
+          <StatCard label="Nouveaux élèves inscrits" value={inscriptionsPeriode.length} />
+        </div>
+
+        <div style={{ fontSize: 13, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Paiements</div>
+        {paiementsPeriode.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: "#8B8578", marginBottom: 24 }}>Aucun paiement enregistré sur cette période.</div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5, marginBottom: 24 }}>
+            <thead>
+              <tr style={{ borderBottom: "1.5px solid var(--primary)" }}>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Date</th>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Élève</th>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Classe</th>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Libellé</th>
+                <th style={thBulletin}>Montant</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paiementsPeriode.map((p) => {
+                const s = studentById(p.studentId);
+                return (
+                  <tr key={p.id} style={{ borderBottom: "1px solid #EEE" }}>
+                    <td style={tdBulletin}>{p.date}</td>
+                    <td style={tdBulletin}>{s ? `${s.nom} ${s.prenom || ""}` : "—"}</td>
+                    <td style={tdBulletin}>{s?.classe || "—"}</td>
+                    <td style={tdBulletin}>{p.label || "—"}</td>
+                    <td style={{ ...tdBulletin, textAlign: "center", fontWeight: 600 }}>{formatMoney(p.amount, currency)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        <div style={{ fontSize: 13, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Élèves inscrits</div>
+        {inscriptionsPeriode.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: "#8B8578" }}>Aucun élève inscrit sur cette période.</div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+            <thead>
+              <tr style={{ borderBottom: "1.5px solid var(--primary)" }}>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Date d'inscription</th>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Matricule</th>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Nom et Prénom</th>
+                <th style={{ ...thBulletin, textAlign: "left" }}>Classe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inscriptionsPeriode.map((s) => (
+                <tr key={s.id} style={{ borderBottom: "1px solid #EEE" }}>
+                  <td style={tdBulletin}>{(s.createdAt || "").slice(0, 10)}</td>
+                  <td style={tdBulletin}>{formatMatricule(s.nom, s.prenom, s.matriculeNum)}</td>
+                  <td style={tdBulletin}>{s.nom} {s.prenom}</td>
+                  <td style={tdBulletin}>{s.classe}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // App racine — session Supabase, puis Connexion ou Application
 // ============================================================
 export default function App() {
@@ -1524,6 +1635,7 @@ function MainApp({ profile }) {
       id: r.id, nom: r.nom, prenom: r.prenom, classe: r.classe, photo: r.photo,
       sexe: r.sexe, nisu: r.nisu, dateNaissance: r.date_naissance, lieuNaissance: r.lieu_naissance,
       adresse: r.adresse || {}, responsable: r.responsable || {}, matriculeNum: r.matricule_num,
+      createdAt: r.created_at,
     })));
 
     const gMap = {};
@@ -1730,6 +1842,7 @@ function MainApp({ profile }) {
     ...(isEnseignant ? [] : [{ id: "statistiques", label: "Statistiques", icon: ClipboardList }]),
     ...((isDirection || isSecretaire) ? [{ id: "paiements", label: "Paiements", icon: Wallet }] : []),
     ...(isDirection ? [{ id: "decision", label: "Décision fin d'année", icon: FileText }] : []),
+    ...(isDirection ? [{ id: "rapport", label: "Rapport", icon: Calendar }] : []),
     ...(isDirection ? [{ id: "utilisateurs", label: "Utilisateurs", icon: UserCog }] : []),
     ...(isDirection ? [{ id: "parametres", label: "Paramètres", icon: Settings }] : []),
   ];
@@ -1771,6 +1884,9 @@ function MainApp({ profile }) {
         )}
         {effectiveTab === "decision" && isDirection && (
           <DecisionFinAnneeView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} coefficients={coefficients} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} academicYear={academicYear} paperFormat={paperFormat} />
+        )}
+        {effectiveTab === "rapport" && isDirection && (
+          <RapportView students={students} payments={payments} currency={currency} schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} />
         )}
         {effectiveTab === "utilisateurs" && isDirection && (
           <UtilisateursView users={users} currentUserId={profile.id} onAdd={addUser} onUpdateRole={updateUserRole} onRemove={removeUser} />
