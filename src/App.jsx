@@ -540,7 +540,7 @@ function StudentDetailModal({ student, onClose, schoolName, schoolLogo, schoolCo
         @media print {
           body * { visibility: hidden; }
           .fiche-print-area, .fiche-print-area * { visibility: visible; }
-          .fiche-print-area { position: absolute; top: 0; left: 0; width: ${paper.width} !important; min-height: ${paper.height}; box-shadow: none !important; border: none !important; padding: 19mm !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+          .fiche-print-area { position: absolute; top: 0; left: 0; width: ${paper.width} !important; min-height: ${paper.height}; box-shadow: none !important; border: none !important; padding: 19mm !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
           .fiche-print-area *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
           .fiche-modal-overlay { position: static !important; background: none !important; padding: 0 !important; }
           .fiche-no-print { display: none !important; }
@@ -786,7 +786,7 @@ function BulletinsView({ students, subjects, classSubjects, grades, mentions, sc
         <>
         <style>{`
           @media print {
-            .bulletin-print-area { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+            .bulletin-print-area { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
             .bulletin-print-area *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
           }
         `}</style>
@@ -936,7 +936,7 @@ function StatistiquesView({ students, isDirection, myClasses, schoolName, school
       </div>
 
       <style>{`@media print {
-        .stats-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+        .stats-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
         .stats-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
       }`}</style>
 
@@ -1024,7 +1024,7 @@ function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coeff
       </div>
 
       <style>{`@media print {
-        .decision-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+        .decision-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
         .decision-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
       }`}</style>
       <div className="print-area decision-print" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
@@ -1140,7 +1140,7 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
               </div>
 
               <style>{`@media print {
-                .payment-state { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+                .payment-state { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
                 .payment-state *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
               }`}</style>
               <div className="print-area payment-state" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
@@ -1296,7 +1296,7 @@ function ClassePaymentReport({ students, payments, tuitionFees, currency, school
       </div>
 
       <style>{`@media print {
-        .classe-payment-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+        .classe-payment-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
         .classe-payment-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
       }`}</style>
       <div className="print-area classe-payment-print" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
