@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { Users, ClipboardList, FileText, Settings, Plus, Trash2, Printer, X, School, UserCog, LogOut, Wallet, Calendar } from "lucide-react";
+import { Users, ClipboardList, FileText, Settings, Plus, Trash2, Printer, X, School, UserCog, LogOut, Wallet, Calendar, Briefcase } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 const CLASSES = [
@@ -10,6 +10,17 @@ const CLASSES = [
 ];
 const KIND_CLASSES = ["Kind 1", "Kind 2", "Kind 3"];
 const MOYENNE_SUR_10_CLASSES = ["1ère AF", "2ème AF", "3ème AF", "4ème AF", "5ème AF", "6ème AF"];
+// Classes à partir desquelles l'enseignement est réparti par matière (un
+// enseignant peut y enseigner plusieurs matières, chacune avec son propre
+// nombre d'heures) — de la 7ème AF jusqu'au Secondaire IV (« NS IV »).
+const SUBJECT_LEVEL_CLASSES = ["7ème AF", "8ème AF", "9ème AF", "Secondaire I", "Secondaire II", "Secondaire III", "Secondaire IV"];
+// Fonctions possibles pour un membre du personnel. Seule "Enseignant(e)"
+// donne accès au choix de classe(s)/matière(s) — les autres fonctions
+// n'enseignent pas et ont un salaire mensuel fixe saisi à la main.
+const FONCTIONS_PERSONNEL = [
+  "Enseignant(e)", "Secrétaire", "Administrateur/Administratrice",
+  "Surveillant(e) général(e)", "Ménagère", "Gardien", "Chauffeur", "Autre",
+];
 const MENTIONS = ["Excellent", "Très bien", "Bien", "Absent", "Souvent", "Rarement", "Parfois", "Jamais", "Insuffisant"];
 const LOCALITES = ["Thomassique (Centre-Ville)", "1ère Section (Lociane)", "2ème Section (Matelgate)"];
 const LIBELLES_PAIEMENT = ["Frais d'entrée", "Frais d'inscription", "1er Trimestre", "2ème Trimestre", "3ème Trimestre"];
@@ -241,6 +252,29 @@ function ClassCheckboxes({ selected, onChange }) {
             border: active ? "1px solid var(--primary)" : "1px solid #D8D2C2",
             background: active ? "var(--primary)" : "white", color: active ? "white" : "var(--primary)",
           }}>{c}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Comme ClassCheckboxes, mais pour une liste de matières fournie (les
+// matières de l'école, gérées dans Paramètres — chacune ajoutée "à la main").
+function SubjectCheckboxes({ subjects, selected, onChange }) {
+  const toggle = (s) => onChange(selected.includes(s) ? selected.filter((x) => x !== s) : [...selected, s]);
+  if (!subjects || subjects.length === 0) {
+    return <div style={{ fontSize: 12.5, color: "#8B8578" }}>Aucune matière définie — ajoutes-en dans Paramètres.</div>;
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {subjects.map((s) => {
+        const active = selected.includes(s);
+        return (
+          <button key={s} type="button" onClick={() => toggle(s)} style={{
+            padding: "6px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
+            border: active ? "1px solid var(--primary)" : "1px solid #D8D2C2",
+            background: active ? "var(--primary)" : "white", color: active ? "white" : "var(--primary)",
+          }}>{s}</button>
         );
       })}
     </div>
@@ -1650,9 +1684,11 @@ function MainApp({ profile }) {
   const [payments, setPayments] = useState([]);
   const [remarks, setRemarks] = useState({});
   const [users, setUsers] = useState([]);
+  const [personnel, setPersonnel] = useState([]);
+  const [salaryPayments, setSalaryPayments] = useState([]);
 
   const loadAll = useCallback(async () => {
-    const [schoolRes, subjectsRes, classSubjRes, studentsRes, gradesRes, mentionsRes, coeffRes, feesRes, paymentsRes, remarksRes, profilesRes] = await Promise.all([
+    const [schoolRes, subjectsRes, classSubjRes, studentsRes, gradesRes, mentionsRes, coeffRes, feesRes, paymentsRes, remarksRes, profilesRes, personnelRes, salaryPaymentsRes] = await Promise.all([
       supabase.from("schools").select("*").eq("id", schoolId).single(),
       supabase.from("subjects").select("*").eq("school_id", schoolId).order("name"),
       supabase.from("class_subjects").select("*").eq("school_id", schoolId),
@@ -1664,6 +1700,8 @@ function MainApp({ profile }) {
       supabase.from("payments").select("*").eq("school_id", schoolId).order("payment_date", { ascending: false }),
       supabase.from("remarks").select("*").eq("school_id", schoolId),
       supabase.from("profiles").select("*").eq("school_id", schoolId).order("name"),
+      supabase.from("personnel").select("*").eq("school_id", schoolId).order("nom"),
+      supabase.from("salary_payments").select("*").eq("school_id", schoolId).order("payment_date", { ascending: false }),
     ]);
 
     const s = schoolRes.data || {};
@@ -1718,6 +1756,16 @@ function MainApp({ profile }) {
     setRemarks(rMap);
 
     setUsers((profilesRes.data || []).map((r) => ({ id: r.id, name: r.name, role: r.role, classes: r.classes || [] })));
+
+    setPersonnel((personnelRes.data || []).map((r) => ({
+      id: r.id, nom: r.nom, prenom: r.prenom, fonction: r.fonction || "", dateNaissance: r.date_naissance, lieuNaissance: r.lieu_naissance,
+      classes: r.classes || [], matieres: r.matieres || [], matieresParClasse: r.heures_matieres || {}, salaireMensuel: Number(r.salaire_mensuel || 0),
+    })));
+
+    setSalaryPayments((salaryPaymentsRes.data || []).map((r) => ({
+      id: r.id, personnelId: r.personnel_id, montant: Number(r.montant), periode: r.periode || "",
+      date: r.payment_date, note: r.note,
+    })));
     setLoaded(true);
   }, [schoolId]);
 
@@ -1877,6 +1925,37 @@ function MainApp({ profile }) {
   const updateUserRole = async (id, role, classes) => { await supabase.from("profiles").update({ role, classes }).eq("id", id); loadAll(); };
   const removeUser = async (id) => { await supabase.from("profiles").delete().eq("id", id); loadAll(); };
 
+  // ---- Gestion du personnel (fiches employés — réservé à la Direction) ----
+  const addPersonnel = async (form) => {
+    await supabase.from("personnel").insert({
+      school_id: schoolId, nom: form.nom, prenom: form.prenom || null, fonction: form.fonction || "",
+      date_naissance: form.dateNaissance || null, lieu_naissance: form.lieuNaissance || null,
+      classes: form.classes || [], matieres: form.matieres || [], heures_matieres: form.matieresParClasse || {},
+      salaire_mensuel: form.salaireMensuel || 0,
+    });
+    loadAll();
+  };
+  const updatePersonnel = async (id, form) => {
+    await supabase.from("personnel").update({
+      nom: form.nom, prenom: form.prenom || null, fonction: form.fonction || "",
+      date_naissance: form.dateNaissance || null, lieu_naissance: form.lieuNaissance || null,
+      classes: form.classes || [], matieres: form.matieres || [], heures_matieres: form.matieresParClasse || {},
+      salaire_mensuel: form.salaireMensuel || 0,
+    }).eq("id", id);
+    loadAll();
+  };
+  const removePersonnel = async (id) => { await supabase.from("personnel").delete().eq("id", id); loadAll(); };
+
+  // ---- Paiement des salaires (réservé à la Direction) ----
+  const addSalaryPayment = async (personnelId, form) => {
+    await supabase.from("salary_payments").insert({
+      school_id: schoolId, personnel_id: personnelId, montant: Number(form.montant),
+      periode: form.periode || null, payment_date: form.date, note: form.note || null,
+    });
+    loadAll();
+  };
+  const removeSalaryPayment = async (id) => { await supabase.from("salary_payments").delete().eq("id", id); loadAll(); };
+
   const logout = async () => { await supabase.auth.signOut(); };
 
   if (!loaded) {
@@ -1897,6 +1976,7 @@ function MainApp({ profile }) {
     ...((isDirection || isSecretaire) ? [{ id: "paiements", label: "Paiements", icon: Wallet }] : []),
     ...(isDirection ? [{ id: "decision", label: "Décision fin d'année", icon: FileText }] : []),
     ...(isDirection ? [{ id: "rapport", label: "Rapport", icon: Calendar }] : []),
+    ...(isDirection ? [{ id: "personnel", label: "Gestion du personnel", icon: Briefcase }] : []),
     ...(isDirection ? [{ id: "utilisateurs", label: "Utilisateurs", icon: UserCog }] : []),
     ...(isDirection ? [{ id: "parametres", label: "Paramètres", icon: Settings }] : []),
   ];
@@ -1942,6 +2022,14 @@ function MainApp({ profile }) {
         {effectiveTab === "rapport" && isDirection && (
           <RapportView students={students} payments={payments} currency={currency} schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} />
         )}
+        {effectiveTab === "personnel" && isDirection && (
+          <PersonnelView
+            personnel={personnel} subjects={subjects} classSubjects={classSubjects} currency={currency}
+            onAdd={addPersonnel} onUpdate={updatePersonnel} onRemove={removePersonnel}
+            salaryPayments={salaryPayments} onAddSalaryPayment={addSalaryPayment} onRemoveSalaryPayment={removeSalaryPayment}
+            schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat}
+          />
+        )}
         {effectiveTab === "utilisateurs" && isDirection && (
           <UtilisateursView users={users} currentUserId={profile.id} onAdd={addUser} onUpdateRole={updateUserRole} onRemove={removeUser} />
         )}
@@ -1970,6 +2058,546 @@ function MainApp({ profile }) {
       </main>
     </div>
     </>
+  );
+}
+
+const EMPTY_PERSONNEL_FORM = { nom: "", prenom: "", fonction: FONCTIONS_PERSONNEL[0], fonctionAutre: "", dateNaissance: "", lieuNaissance: "", classes: [], matieresParClasse: {}, salaireMensuel: "" };
+
+// Additionne heures × prix/heure sur toutes les classes et matières d'un
+// enseignant pour obtenir son salaire mensuel calculé.
+function computeSalaireEnseignant(matieresParClasse) {
+  let total = 0;
+  Object.values(matieresParClasse || {}).forEach((matieres) => {
+    Object.values(matieres || {}).forEach((v) => {
+      const heures = Number(v?.heures) || 0;
+      const prixHeure = Number(v?.prixHeure) || 0;
+      total += heures * prixHeure;
+    });
+  });
+  return total;
+}
+
+// Pour chaque classe sélectionnée qui fait partie du niveau "par matière"
+// (7ème AF à Secondaire IV / NS IV), affiche les matières de cette classe
+// à cocher, puis pour chaque matière choisie le nombre d'heures et le prix
+// de l'heure — chaque ligne (heures × prix) s'additionne pour donner le
+// salaire mensuel calculé de l'enseignant, affiché en bas.
+function ClassSubjectHoursPicker({ classes, subjects, classSubjects, matieresParClasse, currency, onChange }) {
+  const relevantClasses = classes.filter((c) => SUBJECT_LEVEL_CLASSES.includes(c));
+
+  if (relevantClasses.length === 0) {
+    return <div style={{ fontSize: 12.5, color: "#8B8578" }}>Sélectionnez une classe de la 7ème AF au Secondaire IV pour choisir les matières enseignées.</div>;
+  }
+
+  const setForClasse = (classe, nextSelected) => {
+    const prev = matieresParClasse[classe] || {};
+    const next = {};
+    nextSelected.forEach((m) => { next[m] = prev[m] || { heures: "", prixHeure: "" }; });
+    onChange({ ...matieresParClasse, [classe]: next });
+  };
+  const setLigne = (classe, matiere, field, value) => {
+    const prevLigne = matieresParClasse[classe]?.[matiere] || { heures: "", prixHeure: "" };
+    onChange({ ...matieresParClasse, [classe]: { ...(matieresParClasse[classe] || {}), [matiere]: { ...prevLigne, [field]: value } } });
+  };
+
+  const total = computeSalaireEnseignant(matieresParClasse);
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {relevantClasses.map((classe) => {
+          const effectiveSubjects = classSubjects?.[classe]?.length ? classSubjects[classe] : subjects;
+          const selected = Object.keys(matieresParClasse[classe] || {});
+          return (
+            <div key={classe} style={{ background: "#F7F5F0", borderRadius: 8, padding: "12px 14px" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--primary)", marginBottom: 8 }}>{classe}</div>
+              <SubjectCheckboxes subjects={effectiveSubjects} selected={selected} onChange={(v) => setForClasse(classe, v)} />
+              {selected.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+                  {selected.map((m) => {
+                    const ligne = matieresParClasse[classe]?.[m] || { heures: "", prixHeure: "" };
+                    const sousTotal = (Number(ligne.heures) || 0) * (Number(ligne.prixHeure) || 0);
+                    return (
+                      <div key={m} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 13, width: 140 }}>{m}</div>
+                        <input
+                          type="text" inputMode="numeric" placeholder="Heures/mois" style={{ ...inputStyle, maxWidth: 120 }}
+                          value={ligne.heures}
+                          onChange={(e) => setLigne(classe, m, "heures", e.target.value.replace(/[^0-9]/g, ""))}
+                        />
+                        <span style={{ fontSize: 13, color: "#8B8578" }}>×</span>
+                        <input
+                          type="text" inputMode="numeric" placeholder="Prix/heure" style={{ ...inputStyle, maxWidth: 120 }}
+                          value={ligne.prixHeure}
+                          onChange={(e) => setLigne(classe, m, "prixHeure", e.target.value.replace(/[^0-9]/g, ""))}
+                        />
+                        <span style={{ fontSize: 13, color: "#8B8578" }}>=</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--primary)" }}>{formatMoney(sousTotal, currency)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F1EEE5", borderRadius: 8, padding: "12px 16px", marginTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Salaire mensuel calculé</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--primary)" }}>{formatMoney(total, currency)}</div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Gestion du personnel — fiches employés + paiement des salaires
+// (réservé à la Direction).
+// ============================================================
+function PersonnelView({
+  personnel, subjects, classSubjects, currency, onAdd, onUpdate, onRemove,
+  salaryPayments, onAddSalaryPayment, onRemoveSalaryPayment,
+  schoolName, schoolLogo, schoolAddress, schoolPhone, paperFormat,
+}) {
+  const [mode, setMode] = useState("fiches"); // fiches | paiement
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(EMPTY_PERSONNEL_FORM);
+  const [filter, setFilter] = useState("");
+
+  const isEnseignant = form.fonction === "Enseignant(e)";
+
+  const openAdd = () => { setEditingId(null); setForm(EMPTY_PERSONNEL_FORM); setShowForm(true); };
+  const openEdit = (p) => {
+    setEditingId(p.id);
+    const fonctionConnue = FONCTIONS_PERSONNEL.includes(p.fonction);
+    setForm({
+      nom: p.nom || "", prenom: p.prenom || "",
+      fonction: fonctionConnue ? p.fonction : (p.fonction ? "Autre" : FONCTIONS_PERSONNEL[0]),
+      fonctionAutre: fonctionConnue ? "" : (p.fonction || ""),
+      dateNaissance: p.dateNaissance || "", lieuNaissance: p.lieuNaissance || "",
+      classes: p.classes || [], matieresParClasse: p.matieresParClasse || {},
+      salaireMensuel: p.salaireMensuel ? String(p.salaireMensuel) : "",
+    });
+    setShowForm(true);
+  };
+  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(EMPTY_PERSONNEL_FORM); };
+
+  const submit = () => {
+    if (!form.nom.trim()) return;
+    const fonctionFinale = form.fonction === "Autre" ? (form.fonctionAutre.trim() || "Autre") : form.fonction;
+
+    if (!isEnseignant) {
+      // Le personnel non-enseignant n'a pas de classe/matière : salaire fixe saisi à la main.
+      const payload = {
+        ...form, fonction: fonctionFinale, classes: [], matieresParClasse: {}, matieres: [],
+        salaireMensuel: form.salaireMensuel === "" ? 0 : Math.max(0, Number(form.salaireMensuel) || 0),
+      };
+      if (editingId) onUpdate(editingId, payload);
+      else onAdd(payload);
+      closeForm();
+      return;
+    }
+
+    // Enseignant(e) : ne garde que les classes encore sélectionnées, convertit
+    // heures/prix en nombres, et calcule le salaire mensuel (somme des heures × prix/heure).
+    const matieresParClasse = {};
+    form.classes.filter((c) => SUBJECT_LEVEL_CLASSES.includes(c)).forEach((c) => {
+      const matieres = form.matieresParClasse[c] || {};
+      const cleaned = {};
+      Object.keys(matieres).forEach((m) => {
+        cleaned[m] = { heures: Number(matieres[m]?.heures) || 0, prixHeure: Number(matieres[m]?.prixHeure) || 0 };
+      });
+      if (Object.keys(cleaned).length > 0) matieresParClasse[c] = cleaned;
+    });
+    const matieres = [...new Set(Object.values(matieresParClasse).flatMap((obj) => Object.keys(obj)))];
+    const salaireMensuel = computeSalaireEnseignant(matieresParClasse);
+    const payload = { ...form, fonction: fonctionFinale, matieresParClasse, matieres, salaireMensuel };
+    if (editingId) onUpdate(editingId, payload);
+    else onAdd(payload);
+    closeForm();
+  };
+
+  const filtered = personnel.filter((p) =>
+    `${p.nom} ${p.prenom || ""} ${p.fonction || ""} ${(p.classes || []).join(" ")} ${(p.matieres || []).join(" ")}`.toLowerCase().includes(filter.toLowerCase())
+  );
+  const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
+
+  return (
+    <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <SectionTitle sub={`${personnel.length} membre${personnel.length !== 1 ? "s" : ""} du personnel enregistré${personnel.length !== 1 ? "s" : ""}`}>Gestion du personnel</SectionTitle>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setMode("fiches")} style={mode === "fiches" ? btnPrimary : btnSecondary}>Fiches</button>
+          <button onClick={() => setMode("paiement")} style={mode === "paiement" ? btnPrimary : btnSecondary}>Paiement</button>
+        </div>
+      </div>
+
+      {mode === "fiches" && (
+        <div>
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 12 }}>
+            <input placeholder="Rechercher un nom, une fonction, une classe ou une matière…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 320 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => window.print()} style={btnSecondary}><Printer size={16} /> Imprimer</button>
+              <button onClick={openAdd} style={btnPrimary}><Plus size={16} /> Ajouter un membre</button>
+            </div>
+          </div>
+
+          {showForm && (
+            <div className="no-print" style={cardStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{editingId ? "Modifier le membre du personnel" : "Nouveau membre du personnel"}</div>
+                <button onClick={closeForm} style={iconBtn}><X size={16} /></button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+                <Field label="Nom *"><input style={{ ...inputStyle, textTransform: "uppercase" }} value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value.toUpperCase() })} /></Field>
+                <Field label="Prénom"><input style={inputStyle} value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} /></Field>
+                <Field label="Fonction">
+                  <select style={inputStyle} value={form.fonction} onChange={(e) => setForm({ ...form, fonction: e.target.value, classes: e.target.value === "Enseignant(e)" ? form.classes : [], matieresParClasse: e.target.value === "Enseignant(e)" ? form.matieresParClasse : {} })}>
+                    {FONCTIONS_PERSONNEL.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </Field>
+                {form.fonction === "Autre" && (
+                  <Field label="Précisez la fonction"><input style={inputStyle} value={form.fonctionAutre} onChange={(e) => setForm({ ...form, fonctionAutre: e.target.value })} /></Field>
+                )}
+                <Field label="Date de naissance"><input type="date" style={inputStyle} value={form.dateNaissance} onChange={(e) => setForm({ ...form, dateNaissance: e.target.value })} /></Field>
+                <Field label="Lieu de naissance"><input style={inputStyle} value={form.lieuNaissance} onChange={(e) => setForm({ ...form, lieuNaissance: e.target.value })} /></Field>
+              </div>
+
+              {isEnseignant ? (
+                <>
+                  <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Classe(s) enseignée(s)</div>
+                  <div style={{ marginBottom: 18 }}>
+                    <ClassCheckboxes selected={form.classes} onChange={(v) => setForm({ ...form, classes: v })} />
+                  </div>
+
+                  <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Matière(s), heures et prix par heure, par classe (7ème AF à Secondaire IV)</div>
+                  <div style={{ marginBottom: 18 }}>
+                    <ClassSubjectHoursPicker
+                      classes={form.classes} subjects={subjects} classSubjects={classSubjects} currency={currency}
+                      matieresParClasse={form.matieresParClasse}
+                      onChange={(v) => setForm({ ...form, matieresParClasse: v })}
+                    />
+                  </div>
+                </>
+              ) : (
+                <Field label="Salaire mensuel">
+                  <input
+                    type="text" inputMode="numeric" style={{ ...inputStyle, maxWidth: 200 }} placeholder="Montant"
+                    value={form.salaireMensuel}
+                    onChange={(e) => setForm({ ...form, salaireMensuel: e.target.value.replace(/[^0-9]/g, "") })}
+                  />
+                </Field>
+              )}
+
+              <ConfirmButton
+                onConfirm={submit}
+                message={editingId ? "Confirmer l'enregistrement des modifications ?" : "Confirmer l'enregistrement de ce membre du personnel ?"}
+                style={{ ...btnPrimary, marginTop: 20 }}
+              >
+                {editingId ? "Enregistrer les modifications" : "Enregistrer"}
+              </ConfirmButton>
+            </div>
+          )}
+
+          {filtered.length === 0 ? (
+            <EmptyState text={personnel.length === 0 ? "Aucun membre du personnel à afficher pour l'instant." : "Aucun résultat pour cette recherche."} />
+          ) : (
+            <>
+            <style>{`@media print {
+              .personnel-fiches-print { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+              .personnel-fiches-print *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+            }`}</style>
+            <div className="print-area personnel-fiches-print" style={{ background: "white", borderRadius: 10, border: "1px solid #E5E1D6", overflow: "hidden", padding: "32px 36px" }}>
+              <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="Liste du personnel" />
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: "#F1EEE5", textAlign: "left" }}>
+                    <th style={th}>Nom et Prénom</th><th style={th}>Fonction</th><th style={th}>Classe(s)</th><th style={th}>Matière(s) par classe (heures × prix/h)</th><th style={th}>Salaire mensuel</th>
+                    <th className="no-print" style={{ ...th, width: 100 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((p) => (
+                    <tr key={p.id} style={{ borderTop: "1px solid #EEE" }}>
+                      <td style={td}>{p.nom} {p.prenom}</td>
+                      <td style={td}>{p.fonction || "—"}</td>
+                      <td style={td}>{(p.classes || []).join(", ") || "—"}</td>
+                      <td style={{ ...td, fontSize: 13 }}>
+                        {Object.keys(p.matieresParClasse || {}).length === 0 ? "—" : Object.entries(p.matieresParClasse).map(([classe, matieres]) => (
+                          <div key={classe} style={{ marginBottom: 2 }}>
+                            <strong>{classe} :</strong> {Object.entries(matieres).map(([m, v]) => `${m} (${v?.heures || 0}h × ${formatMoney(v?.prixHeure || 0, currency)})`).join(", ")}
+                          </div>
+                        ))}
+                      </td>
+                      <td style={td}>{formatMoney(p.salaireMensuel, currency)}</td>
+                      <td className="no-print" style={td}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => openEdit(p)} style={iconBtn}><UserCog size={15} color="#1E4D8C" /></button>
+                          <ConfirmButton onConfirm={() => onRemove(p.id)} message={`Confirmer la suppression de ${p.nom} ${p.prenom || ""} ?`} style={iconBtn}>
+                            <Trash2 size={15} color="#A3272E" />
+                          </ConfirmButton>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === "paiement" && (
+        <PersonnelPaiementView
+          personnel={personnel} salaryPayments={salaryPayments} currency={currency}
+          onAddPayment={onAddSalaryPayment} onRemovePayment={onRemoveSalaryPayment}
+          schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Paiement des salaires du personnel (réservé à la Direction) : par
+// membre (historique + enregistrement) ou par période (rapport imprimable
+// de tous les paiements de salaires sur une plage de dates).
+// ============================================================
+function PersonnelPaiementView({ personnel, salaryPayments, currency, onAddPayment, onRemovePayment, schoolName, schoolLogo, schoolAddress, schoolPhone, paperFormat }) {
+  const [subMode, setSubMode] = useState("membre"); // membre | periode
+  const [filter, setFilter] = useState("");
+  const [personnelId, setPersonnelId] = useState(personnel[0]?.id || "");
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ montant: "", periode: "", date: today, note: "" });
+  const [dateDebut, setDateDebut] = useState(today);
+  const [dateFin, setDateFin] = useState(today);
+  const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
+
+  const filtered = personnel.filter((p) => `${p.nom} ${p.prenom || ""} ${p.fonction || ""}`.toLowerCase().includes(filter.toLowerCase()));
+  const membre = personnel.find((p) => p.id === personnelId);
+  const membrePaiements = salaryPayments.filter((p) => p.personnelId === personnelId).sort((a, b) => b.date.localeCompare(a.date));
+
+  const submit = () => {
+    const montant = Number(form.montant);
+    if (!personnelId || !montant || montant <= 0) return;
+    onAddPayment(personnelId, form);
+    setForm({ montant: "", periode: "", date: today, note: "" });
+  };
+
+  const openMembre = (p) => { setPersonnelId(p.id); setForm({ montant: p.salaireMensuel ? String(p.salaireMensuel) : "", periode: "", date: today, note: "" }); };
+
+  const dansPeriode = (d) => d && d >= dateDebut && d <= dateFin;
+  const paiementsPeriode = salaryPayments.filter((p) => dansPeriode(p.date)).sort((a, b) => a.date.localeCompare(b.date));
+  const totalPeriode = paiementsPeriode.reduce((a, p) => a + p.montant, 0);
+  const membreById = (id) => personnel.find((p) => p.id === id);
+  const periodeLabel = dateDebut === dateFin ? dateDebut : `${dateDebut} au ${dateFin}`;
+  // Masse salariale mensuelle : somme des salaires mensuels de tout le personnel actuel.
+  const masseSalariale = personnel.reduce((a, p) => a + (p.salaireMensuel || 0), 0);
+  // Répartition des paiements de la plage sélectionnée, regroupés par période saisie.
+  const parPeriode = {};
+  paiementsPeriode.forEach((p) => {
+    const key = p.periode || "Sans période";
+    if (!parPeriode[key]) parPeriode[key] = { count: 0, total: 0 };
+    parPeriode[key].count += 1;
+    parPeriode[key].total += p.montant;
+  });
+  const periodesTriees = Object.keys(parPeriode).sort();
+
+  if (personnel.length === 0) {
+    return <EmptyState text="Ajoutez d'abord des membres du personnel pour enregistrer des paiements de salaire." />;
+  }
+
+  return (
+    <div>
+      <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        <button onClick={() => setSubMode("membre")} style={subMode === "membre" ? btnPrimary : btnSecondary}>Par membre</button>
+        <button onClick={() => setSubMode("periode")} style={subMode === "periode" ? btnPrimary : btnSecondary}>Rapport par période</button>
+      </div>
+
+      {subMode === "membre" && (
+        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 24, alignItems: "flex-start" }}>
+          <div className="no-print">
+            <input placeholder="Nom ou fonction…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...inputStyle, width: "100%", marginBottom: 12 }} />
+            <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E1D6", maxHeight: 480, overflowY: "auto" }}>
+              {filtered.map((p) => {
+                const active = p.id === personnelId;
+                return (
+                  <button key={p.id} onClick={() => openMembre(p)} style={{
+                    display: "block", width: "100%", textAlign: "left", padding: "12px 14px",
+                    background: active ? "#F1EEE5" : "white", border: "none", borderBottom: "1px solid #EEE", cursor: "pointer",
+                  }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--primary)" }}>{p.nom} {p.prenom}</div>
+                    <div style={{ fontSize: 11.5, color: "#8B8578" }}>{p.fonction || "—"} · {formatMoney(p.salaireMensuel, currency)}/mois</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {membre && (
+            <div>
+              <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                <button onClick={() => window.print()} style={btnPrimary}><Printer size={16} /> Imprimer l'état de paiement</button>
+              </div>
+
+              <style>{`@media print {
+                .personnel-payment-state { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+                .personnel-payment-state *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+              }`}</style>
+              <div className="print-area personnel-payment-state" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
+                <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title="État de paiement — Salaire" />
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px", fontSize: 14, marginBottom: 20 }}>
+                  <div style={{ gridColumn: "1 / -1" }}><strong>Membre :</strong> {membre.nom} {membre.prenom}</div>
+                  <div><strong>Fonction :</strong> {membre.fonction || "—"}</div>
+                  <div><strong>Salaire mensuel :</strong> {formatMoney(membre.salaireMensuel, currency)}</div>
+                </div>
+
+                <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Historique des paiements</div>
+                {membrePaiements.length === 0 ? (
+                  <div style={{ fontSize: 13.5, color: "#8B8578" }}>Aucun paiement enregistré.</div>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                    <thead><tr style={{ borderBottom: "1.5px solid var(--primary)" }}><th style={{ ...thBulletin, textAlign: "left" }}>Date</th><th style={{ ...thBulletin, textAlign: "left" }}>Période</th><th style={thBulletin}>Montant</th></tr></thead>
+                    <tbody>
+                      {membrePaiements.map((p) => (
+                        <tr key={p.id} style={{ borderBottom: "1px solid #EEE" }}>
+                          <td style={tdBulletin}>{p.date}</td>
+                          <td style={tdBulletin}>{p.periode || "—"}</td>
+                          <td style={{ ...tdBulletin, textAlign: "center", fontWeight: 600 }}>{formatMoney(p.montant, currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="no-print" style={{ marginTop: 24 }}>
+                <div style={cardStyle}>
+                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Enregistrer un paiement de salaire</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+                    <Field label="Montant"><input type="number" min="0" style={inputStyle} value={form.montant} onChange={(e) => setForm({ ...form, montant: e.target.value })} /></Field>
+                    <Field label="Date"><input type="date" style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+                    <Field label="Période"><input style={inputStyle} placeholder="Ex. Août 2026" value={form.periode} onChange={(e) => setForm({ ...form, periode: e.target.value })} /></Field>
+                    <Field label="Note"><input style={inputStyle} placeholder="optionnel" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+                  </div>
+                  <ConfirmButton onConfirm={submit} message="Confirmer l'enregistrement de ce paiement de salaire ?" style={btnPrimary}>Enregistrer le paiement</ConfirmButton>
+                </div>
+
+                <div style={{ fontSize: 13, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", margin: "20px 0 10px" }}>Modifier l'historique</div>
+                {membrePaiements.length === 0 ? (
+                  <EmptyState text="Aucun paiement enregistré pour ce membre." />
+                ) : (
+                  <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E1D6", overflow: "hidden" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                      <thead><tr style={{ background: "#F1EEE5", textAlign: "left" }}><th style={th}>Date</th><th style={th}>Période</th><th style={th}>Montant</th><th style={th}>Note</th><th style={{ ...th, width: 40 }}></th></tr></thead>
+                      <tbody>
+                        {membrePaiements.map((p) => (
+                          <tr key={p.id} style={{ borderTop: "1px solid #EEE" }}>
+                            <td style={td}>{p.date}</td>
+                            <td style={td}>{p.periode || "—"}</td>
+                            <td style={{ ...td, fontWeight: 600 }}>{formatMoney(p.montant, currency)}</td>
+                            <td style={td}>{p.note || "—"}</td>
+                            <td style={td}>
+                              <ConfirmButton onConfirm={() => onRemovePayment(p.id)} message="Confirmer la suppression de ce paiement ?" style={iconBtn}>
+                                <Trash2 size={15} color="#A3272E" />
+                              </ConfirmButton>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {subMode === "periode" && (
+        <div>
+          <div className="no-print" style={{ display: "flex", gap: 14, marginBottom: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <Field label="Du"><input type="date" style={inputStyle} value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} /></Field>
+            <Field label="Au"><input type="date" style={inputStyle} value={dateFin} onChange={(e) => setDateFin(e.target.value)} /></Field>
+            <button onClick={() => window.print()} style={btnPrimary}><Printer size={16} /> Imprimer</button>
+          </div>
+
+          <style>{`@media print {
+            .personnel-payment-rapport { width: ${paper.width} !important; min-height: ${paper.height}; padding: 19mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; box-sizing: border-box !important; font-family: 'Calibri Light', Calibri, sans-serif !important; }
+            .personnel-payment-rapport *:not(.doc-header):not(.doc-header *):not(.doc-title):not(.keep-color):not(.keep-color *) { color: #000 !important; border-color: #999 !important; }
+          }`}</style>
+
+          <div className="print-area personnel-payment-rapport" style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: "32px 36px" }}>
+            <DocHeader schoolLogo={schoolLogo} schoolName={schoolName} schoolAddress={schoolAddress} schoolPhone={schoolPhone} title={`Rapport des salaires — ${periodeLabel}`} />
+
+            <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+              <StatCard label="Masse salariale mensuelle (effectif actuel)" value={formatMoney(masseSalariale, currency)} />
+              <StatCard label="Paiements enregistrés" value={paiementsPeriode.length} />
+              <StatCard label="Total versé sur la période" value={formatMoney(totalPeriode, currency)} />
+            </div>
+
+            <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Répartition par période</div>
+            {periodesTriees.length === 0 ? (
+              <div style={{ fontSize: 13.5, color: "#8B8578", marginBottom: 24 }}>Aucun paiement de salaire enregistré sur cette période.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5, marginBottom: 24 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1.5px solid var(--primary)" }}>
+                    <th style={{ ...thBulletin, textAlign: "left" }}>Période</th>
+                    <th style={thBulletin}>Paiements</th>
+                    <th style={thBulletin}>Total versé</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {periodesTriees.map((periode) => (
+                    <tr key={periode} style={{ borderBottom: "1px solid #EEE" }}>
+                      <td style={tdBulletin}>{periode}</td>
+                      <td style={{ ...tdBulletin, textAlign: "center" }}>{parPeriode[periode].count}</td>
+                      <td style={{ ...tdBulletin, textAlign: "center", fontWeight: 600 }}>{formatMoney(parPeriode[periode].total, currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <div style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Détail des paiements</div>
+            {paiementsPeriode.length === 0 ? (
+              <div style={{ fontSize: 13.5, color: "#8B8578" }}>Aucun paiement de salaire enregistré sur cette période.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1.5px solid var(--primary)" }}>
+                    <th style={{ ...thBulletin, textAlign: "left" }}>Date</th>
+                    <th style={{ ...thBulletin, textAlign: "left" }}>Membre</th>
+                    <th style={{ ...thBulletin, textAlign: "left" }}>Fonction</th>
+                    <th style={{ ...thBulletin, textAlign: "left" }}>Période</th>
+                    <th style={thBulletin}>Montant</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paiementsPeriode.map((p) => {
+                    const m = membreById(p.personnelId);
+                    return (
+                      <tr key={p.id} style={{ borderBottom: "1px solid #EEE" }}>
+                        <td style={tdBulletin}>{p.date}</td>
+                        <td style={tdBulletin}>{m ? `${m.nom} ${m.prenom || ""}` : "—"}</td>
+                        <td style={tdBulletin}>{m?.fonction || "—"}</td>
+                        <td style={tdBulletin}>{p.periode || "—"}</td>
+                        <td style={{ ...tdBulletin, textAlign: "center", fontWeight: 600 }}>{formatMoney(p.montant, currency)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

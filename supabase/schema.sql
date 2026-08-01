@@ -171,6 +171,38 @@ create table if not exists remarks (
 );
 
 -- ============================================================
+-- PERSONNEL (fiches employés — réservé à la Direction, salaire inclus)
+-- ============================================================
+create table if not exists personnel (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references schools(id) on delete cascade,
+  nom text not null,
+  prenom text,
+  fonction text default '',
+  date_naissance date,
+  lieu_naissance text,
+  classes text[] not null default '{}',
+  matieres text[] not null default '{}',
+  heures_matieres jsonb not null default '{}'::jsonb,
+  salaire_mensuel numeric not null default 0,
+  created_at timestamptz default now()
+);
+
+-- ============================================================
+-- PAIEMENTS DE SALAIRES (réservé à la Direction)
+-- ============================================================
+create table if not exists salary_payments (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid not null references schools(id) on delete cascade,
+  personnel_id uuid not null references personnel(id) on delete cascade,
+  montant numeric not null check (montant > 0),
+  periode text,
+  payment_date date not null default current_date,
+  note text,
+  created_at timestamptz default now()
+);
+
+-- ============================================================
 -- SÉCURITÉ (RLS)
 -- ============================================================
 alter table schools enable row level security;
@@ -184,6 +216,8 @@ alter table coefficients enable row level security;
 alter table tuition_fees enable row level security;
 alter table payments enable row level security;
 alter table remarks enable row level security;
+alter table personnel enable row level security;
+alter table salary_payments enable row level security;
 
 create policy "read own school" on schools for select using (id = my_school_id());
 create policy "direction update own school" on schools for update using (id = my_school_id() and my_role() = 'direction');
@@ -240,5 +274,13 @@ create policy "direction delete payments" on payments for delete
 
 create policy "school members read remarks" on remarks for select using (school_id = my_school_id());
 create policy "direction write remarks" on remarks for all
+  using (school_id = my_school_id() and my_role() = 'direction')
+  with check (school_id = my_school_id() and my_role() = 'direction');
+
+create policy "direction all personnel" on personnel for all
+  using (school_id = my_school_id() and my_role() = 'direction')
+  with check (school_id = my_school_id() and my_role() = 'direction');
+
+create policy "direction all salary_payments" on salary_payments for all
   using (school_id = my_school_id() and my_role() = 'direction')
   with check (school_id = my_school_id() and my_role() = 'direction');
