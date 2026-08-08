@@ -76,6 +76,7 @@ create table if not exists students (
   lieu_naissance text,
   adresse jsonb default '{}'::jsonb,
   responsable jsonb default '{}'::jsonb,
+  statut text not null default 'actif' check (statut in ('actif', 'diplome', 'inactif')),
   created_at timestamptz default now(),
   unique (school_id, matricule_num)
 );
@@ -108,7 +109,8 @@ create table if not exists grades (
   subject text not null,
   period text not null,
   score numeric not null check (score >= 0),
-  unique (student_id, subject, period)
+  academic_year text,
+  unique (student_id, subject, period, academic_year)
 );
 
 create table if not exists mentions (
@@ -118,7 +120,8 @@ create table if not exists mentions (
   subject text not null,
   period text not null,
   mention text not null,
-  unique (student_id, subject, period)
+  academic_year text,
+  unique (student_id, subject, period, academic_year)
 );
 
 -- ============================================================
@@ -155,6 +158,7 @@ create table if not exists payments (
   payment_date date not null default current_date,
   label text,
   note text,
+  academic_year text,
   created_at timestamptz default now()
 );
 
@@ -167,7 +171,8 @@ create table if not exists remarks (
   student_id uuid references students(id) on delete cascade,
   period text not null,
   text text,
-  unique (student_id, period)
+  academic_year text,
+  unique (student_id, period, academic_year)
 );
 
 -- ============================================================
@@ -201,6 +206,21 @@ create table if not exists salary_payments (
   note text,
   created_at timestamptz default now()
 );
+
+-- ============================================================
+-- INDEX DE PERFORMANCE (school_id et clés étrangères non couvertes
+-- par une contrainte unique existante)
+-- ============================================================
+create index if not exists idx_students_school_statut on students(school_id, statut);
+create index if not exists idx_grades_school_id on grades(school_id);
+create index if not exists idx_mentions_school_id on mentions(school_id);
+create index if not exists idx_remarks_school_id on remarks(school_id);
+create index if not exists idx_payments_school_id on payments(school_id);
+create index if not exists idx_payments_student_id on payments(student_id);
+create index if not exists idx_profiles_school_id on profiles(school_id);
+create index if not exists idx_personnel_school_id on personnel(school_id);
+create index if not exists idx_salary_payments_school_id on salary_payments(school_id);
+create index if not exists idx_salary_payments_personnel_id on salary_payments(personnel_id);
 
 -- ============================================================
 -- SÉCURITÉ (RLS)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { Users, ClipboardList, FileText, Settings, Plus, Trash2, Printer, X, School, UserCog, LogOut, Wallet, Calendar, Briefcase } from "lucide-react";
+import { Users, ClipboardList, FileText, Settings, Plus, Trash2, Printer, X, School, UserCog, LogOut, Wallet, Calendar, Briefcase, ArrowUpCircle, Eye, EyeOff } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 const CLASSES = [
@@ -93,6 +93,34 @@ function weightedAverage(studentId, classe, period, subjects, grades, coefficien
   return totalMax > 0 ? (totalScore / totalMax) * 100 : null;
 }
 
+// Moyenne des 3 trimestres + décision de fin d'année pour un élève — utilisée
+// à la fois par "Décision de fin d'année" (affichage) et "Passage à l'année
+// supérieure" (proposition de classe suivante).
+function computeYearDecision(s, subjects, classSubjects, grades, coefficients) {
+  if (KIND_CLASSES.includes(s.classe)) return { moyenne: null, mention: "—", admis: true };
+  const effectiveSubjects = classSubjects?.[s.classe]?.length ? classSubjects[s.classe] : subjects;
+  const avgs = PERIODS
+    .map((p) => weightedAverage(s.id, s.classe, p, effectiveSubjects, grades, coefficients))
+    .filter((v) => v !== null);
+  const moyenne = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+  const mention = moyenne === null ? "—" : (moyenne >= 50 ? "Réussi(e)" : "Échoué(e)");
+  // Pas de notes du tout -> impossible à évaluer, proposé "admis" par défaut mais à vérifier manuellement.
+  const admis = moyenne === null ? true : moyenne >= 50;
+  return { moyenne, mention, admis };
+}
+
+// Classe suivante dans l'ordre (Kind 1 → … → Secondaire IV). Retourne null
+// pour Secondaire IV (fin du cursus — l'élève est proposé "Diplômé").
+function nextClassOf(classe) {
+  const idx = CLASSES.indexOf(classe);
+  if (idx === -1 || idx === CLASSES.length - 1) return null;
+  return CLASSES[idx + 1];
+}
+
+const DIPLOME_LABEL = "Diplômé(e)";
+const RETIRE_LABEL = "Retiré(e) / Parti(e)";
+const PROMOTION_TARGET_OPTIONS = [...CLASSES, DIPLOME_LABEL, RETIRE_LABEL];
+
 function classRanking(students, classe, period, subjects, grades, coefficients) {
   const scored = students
     .filter((s) => s.classe === classe)
@@ -148,7 +176,32 @@ function resizePhoto(file, maxSize = 160, quality = 0.7) {
   });
 }
 
-function PasswordGate({ password, children }) {
+// Champ mot de passe réutilisable, avec une icône "œil" pour afficher/masquer
+// la saisie — utilisé partout où un mot de passe est demandé (connexion,
+// déverrouillage, création de compte, etc.).
+function PasswordInput({ style, value, onChange, onKeyDown, placeholder, autoFocus, autoComplete }) {
+  const [show, setShow] = useState(false);
+  const hasWidth = style && style.width;
+  return (
+    <div style={{ position: "relative", display: "inline-block", ...(hasWidth ? { width: style.width } : {}) }}>
+      <input
+        type={show ? "text" : "password"}
+        value={value} onChange={onChange} onKeyDown={onKeyDown}
+        placeholder={placeholder} autoFocus={autoFocus} autoComplete={autoComplete}
+        style={{ ...style, ...(hasWidth ? { width: "100%" } : {}), paddingRight: 32, boxSizing: "border-box" }}
+      />
+      <button
+        type="button" tabIndex={-1} onClick={() => setShow((s) => !s)}
+        style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center", color: "#8B8578" }}
+        aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+      >
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
+}
+
+function PasswordGate({ password, children, title = "Paramètres", sub = "Cet onglet est protégé par un mot de passe défini par la Direction" }) {
   const [unlocked, setUnlocked] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
@@ -162,12 +215,12 @@ function PasswordGate({ password, children }) {
 
   return (
     <div>
-      <SectionTitle sub="Cet onglet est protégé par un mot de passe défini par la Direction">Paramètres</SectionTitle>
+      <SectionTitle sub={sub}>{title}</SectionTitle>
       <div style={{ background: "white", border: "1px solid #E5E1D6", borderRadius: 10, padding: 22, maxWidth: 360 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
           <label style={{ fontSize: 12, color: "#8B8578", fontWeight: 600, textTransform: "uppercase" }}>Mot de passe</label>
-          <input
-            type="password" style={inputStyle} value={input}
+          <PasswordInput
+            style={inputStyle} value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && tryUnlock()}
             autoFocus
@@ -203,8 +256,8 @@ function ConfirmButton({ onConfirm, message, style, children, disabled, requireP
         {requirePassword ? (
           <>
             <span style={{ fontSize: 12.5, color: "#8B8578" }}>Mot de passe Direction :</span>
-            <input
-              type="password" autoFocus value={pwd}
+            <PasswordInput
+              autoFocus value={pwd}
               onChange={(e) => { setPwd(e.target.value); setError(""); }}
               onKeyDown={(e) => e.key === "Enter" && validate()}
               style={{ ...inputStyle, width: 140, padding: "5px 10px", fontSize: 12.5 }}
@@ -1025,13 +1078,7 @@ function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coeff
   const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
 
   const computeRow = (s) => {
-    if (KIND_CLASSES.includes(s.classe)) return { s, moyenne: null, mention: "—" };
-    const effectiveSubjects = classSubjects?.[s.classe]?.length ? classSubjects[s.classe] : subjects;
-    const avgs = PERIODS
-      .map((p) => weightedAverage(s.id, s.classe, p, effectiveSubjects, grades, coefficients))
-      .filter((v) => v !== null);
-    const moyenne = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
-    const mention = moyenne === null ? "—" : (moyenne >= 50 ? "Réussi(e)" : "Échoué(e)");
+    const { moyenne, mention } = computeYearDecision(s, subjects, classSubjects, grades, coefficients);
     return { s, moyenne, mention };
   };
 
@@ -1097,7 +1144,131 @@ function DecisionFinAnneeView({ students, subjects, classSubjects, grades, coeff
   );
 }
 
-function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment, onRemovePayment, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, isDirection, paramsPassword }) {
+// ============================================================
+// Passage à l'année supérieure (réservé à la Direction) : propose pour
+// chaque élève actif sa classe de l'année suivante (classe supérieure si
+// admis, même classe si redouble, "Diplômé(e)" pour Secondaire IV admis),
+// modifiable au cas par cas, puis applique tout en une seule confirmation —
+// aucune ressaisie des dossiers élèves, seule la classe (et le statut)
+// changent.
+// ============================================================
+function PassageAnneeView({ students, subjects, classSubjects, grades, coefficients, academicYear, onPromote }) {
+  const [newYear, setNewYear] = useState("");
+  const [classe, setClasse] = useState(CLASSES[0]);
+  const [overrides, setOverrides] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [doneMsg, setDoneMsg] = useState(false);
+
+  const defaultTargetFor = (s) => {
+    const { admis } = computeYearDecision(s, subjects, classSubjects, grades, coefficients);
+    if (!admis) return s.classe;
+    return nextClassOf(s.classe) || DIPLOME_LABEL;
+  };
+  const targetFor = (s) => overrides[s.id] ?? defaultTargetFor(s);
+  const setOverride = (id, value) => setOverrides((o) => ({ ...o, [id]: value }));
+
+  const classStudents = students.filter((s) => s.classe === classe).sort((a, b) => a.nom.localeCompare(b.nom));
+
+  const summary = students.reduce((acc, s) => {
+    const t = targetFor(s);
+    if (t === DIPLOME_LABEL) acc.diplomes++;
+    else if (t === RETIRE_LABEL) acc.retires++;
+    else if (t === s.classe) acc.redoublants++;
+    else acc.admis++;
+    return acc;
+  }, { admis: 0, redoublants: 0, diplomes: 0, retires: 0 });
+
+  const confirm = async () => {
+    if (!newYear.trim() || busy) return;
+    setBusy(true);
+    const changes = students.map((s) => {
+      const t = targetFor(s);
+      if (t === DIPLOME_LABEL) return { id: s.id, classe: s.classe, statut: "diplome" };
+      if (t === RETIRE_LABEL) return { id: s.id, classe: s.classe, statut: "inactif" };
+      return { id: s.id, classe: t, statut: "actif" };
+    });
+    await onPromote(newYear.trim(), changes);
+    setBusy(false);
+    setOverrides({});
+    setDoneMsg(true);
+    setTimeout(() => setDoneMsg(false), 5000);
+  };
+
+  if (students.length === 0) {
+    return <div><SectionTitle>Passage à l'année supérieure</SectionTitle><EmptyState text="Aucun élève actif à faire passer à l'année suivante." /></div>;
+  }
+
+  return (
+    <div>
+      <SectionTitle sub="Vérifiez ou corrigez la classe proposée pour chaque élève, puis confirmez une seule fois pour toute l'école.">Passage à l'année supérieure</SectionTitle>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <StatCard label="Admis (classe supérieure)" value={summary.admis} />
+        <StatCard label="Redoublants" value={summary.redoublants} />
+        <StatCard label="Diplômés (Secondaire IV)" value={summary.diplomes} />
+        <StatCard label="Retirés / Partis" value={summary.retires} />
+      </div>
+
+      <div style={{ display: "flex", gap: 14, marginBottom: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <Field label="Classe à revoir">
+          <select style={inputStyle} value={classe} onChange={(e) => setClasse(e.target.value)}>
+            {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Nouvelle année scolaire *">
+          <input style={inputStyle} placeholder={academicYear ? `actuellement : ${academicYear}` : "ex. 2026-2027"} value={newYear} onChange={(e) => setNewYear(e.target.value)} />
+        </Field>
+      </div>
+
+      {classStudents.length === 0 ? (
+        <EmptyState text="Aucun élève actif dans cette classe." />
+      ) : (
+        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E1D6", overflow: "hidden", marginBottom: 24 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead>
+              <tr style={{ background: "#F1EEE5", textAlign: "left" }}>
+                <th style={th}>Matricule</th><th style={th}>Nom et Prénom</th><th style={th}>Moyenne</th><th style={th}>Décision</th><th style={th}>Classe proposée</th>
+              </tr>
+            </thead>
+            <tbody>
+              {classStudents.map((s) => {
+                const { moyenne, mention } = computeYearDecision(s, subjects, classSubjects, grades, coefficients);
+                const target = targetFor(s);
+                return (
+                  <tr key={s.id} style={{ borderTop: "1px solid #EEE" }}>
+                    <td style={{ ...td, color: "#8B8578" }}>{formatMatricule(s.nom, s.prenom, s.matriculeNum)}</td>
+                    <td style={td}>{s.nom} {s.prenom}</td>
+                    <td style={{ ...td, textAlign: "center" }}>{moyenne !== null ? moyenne.toFixed(1) : "—"}</td>
+                    <td style={{ ...td, textAlign: "center", fontWeight: 600, color: mention === "Échoué(e)" ? "#A3272E" : mention === "Réussi(e)" ? "#3D6B4F" : "#8B8578" }}>{mention}</td>
+                    <td style={td}>
+                      <select style={inputStyle} value={target} onChange={(e) => setOverride(s.id, e.target.value)}>
+                        {PROMOTION_TARGET_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <ConfirmButton
+          onConfirm={confirm}
+          disabled={!newYear.trim() || busy}
+          message={`Confirmer le passage des ${students.length} élève${students.length !== 1 ? "s" : ""} actif${students.length !== 1 ? "s" : ""} vers l'année scolaire « ${newYear} » ? La classe de chaque élève sera mise à jour selon la décision choisie ci-dessus.`}
+          style={btnPrimary}
+        >
+          {busy ? "Passage en cours…" : `Confirmer le passage à l'année ${newYear || "suivante"}`}
+        </ConfirmButton>
+        {doneMsg && <span style={{ fontSize: 13, color: "#3D6B4F", fontWeight: 600 }}>Passage effectué ✓</span>}
+      </div>
+    </div>
+  );
+}
+
+function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment, onRemovePayment, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, isDirection, paramsPassword, academicYear }) {
   const [mode, setMode] = useState("eleve"); // eleve | classe
   const [filter, setFilter] = useState("");
   const [studentId, setStudentId] = useState(students[0]?.id || "");
@@ -1109,7 +1280,11 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
     `${s.nom} ${s.prenom} ${s.classe} ${formatMatricule(s.nom, s.prenom, s.matriculeNum)}`.toLowerCase().includes(filter.toLowerCase())
   );
   const student = students.find((s) => s.id === studentId);
-  const studentPayments = payments.filter((p) => p.studentId === studentId);
+  // Un paiement sans année (ancien) ou de l'année en cours compte pour le suivi
+  // des frais de l'année ; un paiement d'une année précédente ne doit pas
+  // faire apparaître les frais de la nouvelle année comme déjà payés.
+  const sameYear = (p) => !p.academicYear || p.academicYear === academicYear;
+  const studentPayments = payments.filter((p) => p.studentId === studentId && sameYear(p));
   const entreeFee = student ? (tuitionFees[student.classe]?.entree || 0) : 0;
   const inscriptionFee = student ? (tuitionFees[student.classe]?.inscription || 0) : 0;
   const scolariteFee = student ? (tuitionFees[student.classe]?.scolarite || 0) : 0;
@@ -1147,7 +1322,7 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
             <input placeholder="Nom, classe ou matricule…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...inputStyle, width: "100%", marginBottom: 12 }} />
             <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E1D6", maxHeight: 480, overflowY: "auto" }}>
               {filtered.map((s) => {
-                const sPaid = payments.filter((p) => p.studentId === s.id).reduce((a, p) => a + p.amount, 0);
+                const sPaid = payments.filter((p) => p.studentId === s.id && sameYear(p)).reduce((a, p) => a + p.amount, 0);
                 const sFee = (tuitionFees[s.classe]?.entree || 0) + (tuitionFees[s.classe]?.inscription || 0) + (tuitionFees[s.classe]?.scolarite || 0);
                 const due = sFee - sPaid;
                 const active = s.id === studentId;
@@ -1290,7 +1465,7 @@ function PaiementsView({ students, payments, tuitionFees, currency, onAddPayment
         <ClassePaymentReport
           students={students} payments={payments} tuitionFees={tuitionFees} currency={currency}
           schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat}
-          classe={classeReport} setClasse={setClasseReport}
+          classe={classeReport} setClasse={setClasseReport} academicYear={academicYear}
         />
       )}
     </div>
@@ -1306,12 +1481,13 @@ function FeeBox({ label, value, color }) {
   );
 }
 
-function ClassePaymentReport({ students, payments, tuitionFees, currency, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, classe, setClasse }) {
+function ClassePaymentReport({ students, payments, tuitionFees, currency, schoolName, schoolLogo, schoolCode, schoolAddress, schoolPhone, paperFormat, classe, setClasse, academicYear }) {
   const classStudents = students.filter((s) => s.classe === classe).sort((a, b) => a.nom.localeCompare(b.nom));
   const fee = (tuitionFees[classe]?.entree || 0) + (tuitionFees[classe]?.inscription || 0) + (tuitionFees[classe]?.scolarite || 0);
   const paper = PAPER_FORMATS[paperFormat] || PAPER_FORMATS.A4;
+  const sameYear = (p) => !p.academicYear || p.academicYear === academicYear;
   const rows = classStudents.map((s) => {
-    const paid = payments.filter((p) => p.studentId === s.id).reduce((a, p) => a + p.amount, 0);
+    const paid = payments.filter((p) => p.studentId === s.id && sameYear(p)).reduce((a, p) => a + p.amount, 0);
     const balance = fee - paid;
     let statut = "Soldé";
     if (balance > 0 && paid > 0) statut = "Partiel";
@@ -1641,7 +1817,7 @@ function AuthScreen() {
         </Field>
         <div style={{ height: 12 }} />
         <Field label="Mot de passe">
-          <input type="password" autoComplete="off" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+          <PasswordInput autoComplete="off" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
         </Field>
         {error && <div style={{ fontSize: 12.5, color: "#A3272E", marginTop: 12 }}>{error}</div>}
         <button disabled={busy} onClick={submit} style={{ ...btnPrimary, marginTop: 20, width: "100%", justifyContent: "center", background: "#1B2A4A" }}>
@@ -1727,15 +1903,20 @@ function MainApp({ profile }) {
       id: r.id, nom: r.nom, prenom: r.prenom, classe: r.classe, photo: r.photo,
       sexe: r.sexe, nisu: r.nisu, dateNaissance: r.date_naissance, lieuNaissance: r.lieu_naissance,
       adresse: r.adresse || {}, responsable: r.responsable || {}, matriculeNum: r.matricule_num,
-      createdAt: r.created_at,
+      statut: r.statut || "actif", createdAt: r.created_at,
     })));
 
+    // Ne garde que les notes/mentions de l'année scolaire en cours (une ligne
+    // sans année, héritée d'avant cette colonne, est traitée comme actuelle) —
+    // évite qu'un même élève sur plusieurs années scolaires ne mélange ses notes.
+    const sameYear = (r) => !r.academic_year || r.academic_year === s.academic_year;
+
     const gMap = {};
-    (gradesRes.data || []).forEach((r) => { gMap[`${r.student_id}|${r.subject}|${r.period}`] = Number(r.score); });
+    (gradesRes.data || []).filter(sameYear).forEach((r) => { gMap[`${r.student_id}|${r.subject}|${r.period}`] = Number(r.score); });
     setGrades(gMap);
 
     const mMap = {};
-    (mentionsRes.data || []).forEach((r) => { mMap[`${r.student_id}|${r.subject}|${r.period}`] = r.mention; });
+    (mentionsRes.data || []).filter(sameYear).forEach((r) => { mMap[`${r.student_id}|${r.subject}|${r.period}`] = r.mention; });
     setMentions(mMap);
 
     const cMap = {};
@@ -1748,11 +1929,11 @@ function MainApp({ profile }) {
 
     setPayments((paymentsRes.data || []).map((r) => ({
       id: r.id, studentId: r.student_id, matricule: r.matricule, amount: Number(r.amount),
-      date: r.payment_date, label: r.label, note: r.note,
+      date: r.payment_date, label: r.label, note: r.note, academicYear: r.academic_year || "",
     })));
 
     const rMap = {};
-    (remarksRes.data || []).forEach((r) => { rMap[`${r.student_id}|${r.period}`] = r.text; });
+    (remarksRes.data || []).filter(sameYear).forEach((r) => { rMap[`${r.student_id}|${r.period}`] = r.text; });
     setRemarks(rMap);
 
     setUsers((profilesRes.data || []).map((r) => ({ id: r.id, name: r.name, role: r.role, classes: r.classes || [] })));
@@ -1867,25 +2048,42 @@ function MainApp({ profile }) {
   };
   const removeStudent = async (id) => { await supabase.from("students").delete().eq("id", id); loadAll(); };
 
+  // ---- Passage à l'année supérieure (réservé à la Direction) ----
+  // Met à jour la classe/le statut de chaque élève actif par lots (pour ne
+  // pas envoyer des centaines de requêtes en même temps), puis avance
+  // l'année scolaire de l'école. Aucune donnée d'élève n'est recréée —
+  // seuls "classe" et "statut" changent sur la fiche existante.
+  const promoteStudents = async (newYear, changes) => {
+    const chunkSize = 40;
+    for (let i = 0; i < changes.length; i += chunkSize) {
+      const chunk = changes.slice(i, i + chunkSize);
+      await Promise.all(
+        chunk.map((c) => supabase.from("students").update({ classe: c.classe, statut: c.statut }).eq("id", c.id))
+      );
+    }
+    await supabase.from("schools").update({ academic_year: newYear }).eq("id", schoolId);
+    loadAll();
+  };
+
   // ---- Notes et mentions (une note va de 0 au coefficient/max de la matière) ----
   const setScore = async (studentId, subject, period, value) => {
     if (value === "" || value === null) {
-      await supabase.from("grades").delete().match({ student_id: studentId, subject, period });
+      await supabase.from("grades").delete().match({ student_id: studentId, subject, period, academic_year: academicYear });
     } else {
       await supabase.from("grades").upsert(
-        { school_id: schoolId, student_id: studentId, subject, period, score: value },
-        { onConflict: "student_id,subject,period" }
+        { school_id: schoolId, student_id: studentId, subject, period, score: value, academic_year: academicYear },
+        { onConflict: "student_id,subject,period,academic_year" }
       );
     }
     loadAll();
   };
   const setMention = async (studentId, subject, period, value) => {
     if (!value) {
-      await supabase.from("mentions").delete().match({ student_id: studentId, subject, period });
+      await supabase.from("mentions").delete().match({ student_id: studentId, subject, period, academic_year: academicYear });
     } else {
       await supabase.from("mentions").upsert(
-        { school_id: schoolId, student_id: studentId, subject, period, mention: value },
-        { onConflict: "student_id,subject,period" }
+        { school_id: schoolId, student_id: studentId, subject, period, mention: value, academic_year: academicYear },
+        { onConflict: "student_id,subject,period,academic_year" }
       );
     }
     loadAll();
@@ -1897,6 +2095,7 @@ function MainApp({ profile }) {
     await supabase.from("payments").insert({
       school_id: schoolId, student_id: studentId, matricule: formatMatricule(s?.nom, s?.prenom, s?.matriculeNum),
       amount: Number(form.amount), payment_date: form.date, label: form.label || null, note: form.note || null,
+      academic_year: academicYear,
     });
     loadAll();
   };
@@ -1908,8 +2107,8 @@ function MainApp({ profile }) {
     if (!key) return;
     const [studentId, period] = key.split("|");
     await supabase.from("remarks").upsert(
-      { school_id: schoolId, student_id: studentId, period, text: nextMap[key] },
-      { onConflict: "student_id,period" }
+      { school_id: schoolId, student_id: studentId, period, text: nextMap[key], academic_year: academicYear },
+      { onConflict: "student_id,period,academic_year" }
     );
     loadAll();
   };
@@ -1968,6 +2167,11 @@ function MainApp({ profile }) {
   const myClasses = isEnseignant ? (profile.classes || []) : null;
   const effectiveTab = isEnseignant ? "notes" : tab;
 
+  // La plupart des écrans ne doivent afficher que les élèves actifs — un
+  // élève diplômé ou retiré (via "Passage à l'année supérieure") reste dans
+  // la base mais disparaît des listes courantes.
+  const activeStudents = students.filter((s) => (s.statut || "actif") === "actif");
+
   const tabsAvailable = [
     ...(isEnseignant ? [] : [{ id: "eleves", label: "Élèves", icon: Users }]),
     { id: "notes", label: "Notes", icon: ClipboardList },
@@ -1975,6 +2179,12 @@ function MainApp({ profile }) {
     ...(isEnseignant ? [] : [{ id: "statistiques", label: "Statistiques", icon: ClipboardList }]),
     ...((isDirection || isSecretaire) ? [{ id: "paiements", label: "Paiements", icon: Wallet }] : []),
     ...(isDirection ? [{ id: "decision", label: "Décision fin d'année", icon: FileText }] : []),
+    // "Passage à l'année sup." : volontairement retiré de la barre latérale pour
+    // le moment (fonctionnalité prête, mais gardée en réserve pour une prochaine
+    // mise à jour). Le code reste actif et protégé par mot de passe Direction
+    // (voir plus bas) — il suffit de dé-commenter la ligne ci-dessous pour la
+    // republier.
+    // ...(isDirection ? [{ id: "passage", label: "Passage à l'année sup.", icon: ArrowUpCircle }] : []),
     ...(isDirection ? [{ id: "rapport", label: "Rapport", icon: Calendar }] : []),
     ...(isDirection ? [{ id: "personnel", label: "Gestion du personnel", icon: Briefcase }] : []),
     ...(isDirection ? [{ id: "utilisateurs", label: "Utilisateurs", icon: UserCog }] : []),
@@ -2002,22 +2212,31 @@ function MainApp({ profile }) {
 
       <main style={{ flex: 1, padding: "40px 48px", maxWidth: 1100 }}>
         {effectiveTab === "eleves" && !isEnseignant && (
-          <ElevesView students={students} onAdd={addStudent} onUpdate={updateStudent} onRemove={removeStudent} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} paramsPassword={paramsPassword} />
+          <ElevesView students={activeStudents} onAdd={addStudent} onUpdate={updateStudent} onRemove={removeStudent} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} paramsPassword={paramsPassword} />
         )}
         {effectiveTab === "notes" && (
-          <NotesView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} mentions={mentions} coefficients={coefficients} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} onSetScore={setScore} onSetMention={setMention} paramsPassword={paramsPassword} />
+          <NotesView students={activeStudents} subjects={subjects} classSubjects={classSubjects} grades={grades} mentions={mentions} coefficients={coefficients} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} onSetScore={setScore} onSetMention={setMention} paramsPassword={paramsPassword} />
         )}
         {effectiveTab === "bulletins" && !isEnseignant && (
-          <BulletinsView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} mentions={mentions} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} academicYear={academicYear} coefficients={coefficients} remarks={remarks} onSetRemark={setRemark} paperFormat={paperFormat} />
+          <BulletinsView students={activeStudents} subjects={subjects} classSubjects={classSubjects} grades={grades} mentions={mentions} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} isDirection={isDirection} isSecretaire={isSecretaire} myClasses={myClasses} academicYear={academicYear} coefficients={coefficients} remarks={remarks} onSetRemark={setRemark} paperFormat={paperFormat} />
         )}
         {effectiveTab === "statistiques" && !isEnseignant && (
-          <StatistiquesView students={students} isDirection={isDirection || isSecretaire} myClasses={myClasses} schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} academicYear={academicYear} paperFormat={paperFormat} />
+          <StatistiquesView students={activeStudents} isDirection={isDirection || isSecretaire} myClasses={myClasses} schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} academicYear={academicYear} paperFormat={paperFormat} />
         )}
         {effectiveTab === "paiements" && (isDirection || isSecretaire) && (
-          <PaiementsView students={students} payments={payments} tuitionFees={tuitionFees} currency={currency} onAddPayment={addPayment} onRemovePayment={removePayment} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} isDirection={isDirection} paramsPassword={paramsPassword} />
+          <PaiementsView students={activeStudents} payments={payments} tuitionFees={tuitionFees} currency={currency} onAddPayment={addPayment} onRemovePayment={removePayment} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} isDirection={isDirection} paramsPassword={paramsPassword} academicYear={academicYear} />
         )}
         {effectiveTab === "decision" && isDirection && (
-          <DecisionFinAnneeView students={students} subjects={subjects} classSubjects={classSubjects} grades={grades} coefficients={coefficients} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} academicYear={academicYear} paperFormat={paperFormat} />
+          <DecisionFinAnneeView students={activeStudents} subjects={subjects} classSubjects={classSubjects} grades={grades} coefficients={coefficients} schoolName={schoolName} schoolLogo={schoolLogo} schoolCode={schoolCode} schoolAddress={schoolAddress} schoolPhone={schoolPhone} academicYear={academicYear} paperFormat={paperFormat} />
+        )}
+        {effectiveTab === "passage" && isDirection && (
+          <PasswordGate
+            password={paramsPassword}
+            title="Passage à l'année supérieure"
+            sub="Cette action modifie la classe de tous les élèves actifs — protégée par le mot de passe Direction pour éviter toute erreur ou fraude."
+          >
+            <PassageAnneeView students={activeStudents} subjects={subjects} classSubjects={classSubjects} grades={grades} coefficients={coefficients} academicYear={academicYear} onPromote={promoteStudents} />
+          </PasswordGate>
         )}
         {effectiveTab === "rapport" && isDirection && (
           <RapportView students={students} payments={payments} currency={currency} schoolName={schoolName} schoolLogo={schoolLogo} schoolAddress={schoolAddress} schoolPhone={schoolPhone} paperFormat={paperFormat} />
@@ -2641,7 +2860,7 @@ function UtilisateursView({ users, currentUserId, onAdd, onUpdateRole, onRemove 
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
           <Field label="Email de connexion"><input type="email" style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-          <Field label="Mot de passe"><input type="password" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          <Field label="Mot de passe"><PasswordInput style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
         </div>
         {role === "enseignant" && (
           <Field label="Classe(s)">
@@ -2894,7 +3113,7 @@ function ParametresView({
           {paramsPassword ? "Un mot de passe est actuellement requis pour accéder à cet onglet." : "Aucun mot de passe défini — l'onglet Paramètres est ouvert à tous les comptes Direction."}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <input type="password" style={inputStyle} placeholder="Nouveau mot de passe" value={pwd} onChange={(e) => setPwd(e.target.value)} />
+          <PasswordInput style={inputStyle} placeholder="Nouveau mot de passe" value={pwd} onChange={(e) => setPwd(e.target.value)} />
           <button style={btnPrimary} onClick={() => { setParamsPassword(pwd); setPwdSaved(true); setTimeout(() => setPwdSaved(false), 2000); }}>Enregistrer</button>
         </div>
         {pwdSaved && <div style={{ fontSize: 12.5, color: "#3D6B4F", marginTop: 8 }}>Mot de passe mis à jour.</div>}
