@@ -2179,12 +2179,11 @@ function MainApp({ profile }) {
     ...(isEnseignant ? [] : [{ id: "statistiques", label: "Statistiques", icon: ClipboardList }]),
     ...((isDirection || isSecretaire) ? [{ id: "paiements", label: "Paiements", icon: Wallet }] : []),
     ...(isDirection ? [{ id: "decision", label: "Décision fin d'année", icon: FileText }] : []),
-    // "Passage à l'année sup." : volontairement retiré de la barre latérale pour
-    // le moment (fonctionnalité prête, mais gardée en réserve pour une prochaine
-    // mise à jour). Le code reste actif et protégé par mot de passe Direction
-    // (voir plus bas) — il suffit de dé-commenter la ligne ci-dessous pour la
-    // republier.
-    // ...(isDirection ? [{ id: "passage", label: "Passage à l'année sup.", icon: ArrowUpCircle }] : []),
+    // "Passage à l'année sup." : visible uniquement pour la Direction (jamais
+    // Secrétaire/Enseignant), et protégé en plus par le mot de passe Direction
+    // au moment d'y accéder (voir PasswordGate plus bas) — double contrôle
+    // contre toute erreur ou fraude.
+    ...(isDirection ? [{ id: "passage", label: "Passage à l'année sup.", icon: ArrowUpCircle }] : []),
     ...(isDirection ? [{ id: "rapport", label: "Rapport", icon: Calendar }] : []),
     ...(isDirection ? [{ id: "personnel", label: "Gestion du personnel", icon: Briefcase }] : []),
     ...(isDirection ? [{ id: "utilisateurs", label: "Utilisateurs", icon: UserCog }] : []),
