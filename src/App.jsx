@@ -22,7 +22,26 @@ const FONCTIONS_PERSONNEL = [
   "Surveillant(e) général(e)", "Ménagère", "Gardien", "Chauffeur", "Autre",
 ];
 const MENTIONS = ["Excellent", "Très bien", "Bien", "Absent", "Souvent", "Rarement", "Parfois", "Jamais", "Insuffisant"];
-const LOCALITES = ["Thomassique (Centre-Ville)", "1ère Section (Lociane)", "2ème Section (Matelgate)"];
+const VILLES_HAITI = [
+  "Abricots", "Acul-du-Nord", "Anse-à-Foleur", "Anse-à-Pitre", "Anse-à-Veau", "Anse-d'Hainault", "Anse-Rouge",
+  "Aquin", "Arcahaie", "Arniquet", "Bahon", "Bainet", "Baie-de-Henne", "Baptiste", "Baradères", "Bassin-Bleu",
+  "Beaumont", "Belladère", "Belle-Anse", "Bombardopolis", "Bonbon", "Borgne", "Boucan-Carré", "Cabaret",
+  "Camp-Perrin", "Capotille", "Caracol", "Carice", "Carrefour", "Cavaillon", "Cayes-Jacmel", "Cerca-Carvajal",
+  "Cerca-la-Source", "Chambellan", "Chansolme", "Chantal", "Chardonnières", "Cité Soleil", "Corail", "Cornillon",
+  "Côtes-de-Fer", "Croix-des-Bouquets", "Dame-Marie", "Delmas", "Desdunes", "Dessalines", "Dondon", "Ennery",
+  "Fonds-des-Nègres", "Fonds-Verrettes", "Fort-Liberté", "Ganthier", "Gonaïves", "Gressier", "Gros-Morne",
+  "Grand-Goâve", "Grande-Rivière-du-Nord", "Grande-Saline", "Grand-Gosier", "Hinche", "Île-à-Vache", "Jacmel",
+  "Jean-Rabel", "Jérémie", "Kenscoff", "La Chapelle", "La Tortue", "Lascahobas", "La Victoire", "L'Asile",
+  "Léogâne", "Les Anglais", "Les Cayes", "Les Irois", "L'Estère", "Limbé", "Limonade", "Maïssade", "Maniche",
+  "Marchand-Dessalines", "Marigot", "Milot", "Miragoâne", "Mirebalais", "Môle-Saint-Nicolas", "Mombin-Crochu",
+  "Mont-Organisé", "Moron", "Ouanaminthe", "Pestel", "Petit-Goâve", "Petit-Trou-de-Nippes",
+  "Petite-Rivière-de-l'Artibonite", "Petite-Rivière-de-Nippes", "Pétion-Ville", "Perches", "Pignon",
+  "Plaine-du-Nord", "Plaisance", "Plaisance-du-Sud", "Port-à-Piment", "Port-au-Prince", "Port-de-Paix",
+  "Port-Margot", "Port-Salut", "Quartier-Morin", "Ranquitte", "Roche-à-Bateau", "Roseaux", "Saint-Jean-du-Sud",
+  "Saint-Louis-du-Nord", "Saint-Louis-du-Sud", "Saint-Marc", "Saint-Raphaël", "Sainte-Suzanne", "Saut-d'Eau",
+  "Savanette", "Tabarre", "Terre-Neuve", "Terrier-Rouge", "Thiotte", "Thomassique", "Thomazeau", "Tiburon",
+  "Torbeck", "Trou-du-Nord", "Vallières", "Verrettes",
+];
 const LIBELLES_PAIEMENT = ["Frais d'entrée", "Frais d'inscription", "1er Trimestre", "2ème Trimestre", "3ème Trimestre"];
 const PAPER_FORMATS = { A4: { width: "210mm", height: "297mm" }, Lettre: { width: "215.9mm", height: "279.4mm" } };
 const THEME_PRESETS = [
@@ -422,10 +441,10 @@ function AddressFields({ value, onChange }) {
   const v = value || EMPTY_ADDRESS;
   return (
     <>
-      <Field label="Localité">
+      <Field label="Ville">
         <select style={inputStyle} value={v.localite} onChange={(e) => onChange({ ...v, localite: e.target.value })}>
           <option value="">Sélectionner…</option>
-          {LOCALITES.map((l) => <option key={l} value={l}>{l}</option>)}
+          {VILLES_HAITI.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
       </Field>
       <Field label="Nom de la rue">
@@ -447,6 +466,7 @@ function ElevesView({ students, onAdd, onUpdate, onRemove, isDirection, isSecret
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_STUDENT_FORM);
   const [filter, setFilter] = useState("");
+  const [classeFilter, setClasseFilter] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [photoError, setPhotoError] = useState("");
 
@@ -483,7 +503,10 @@ function ElevesView({ students, onAdd, onUpdate, onRemove, isDirection, isSecret
   };
 
   const visible = canManage ? students : students.filter((s) => (myClasses || []).includes(s.classe));
-  const filtered = visible.filter((s) => `${s.nom} ${s.prenom} ${s.classe} ${formatMatricule(s.nom, s.prenom, s.matriculeNum)}`.toLowerCase().includes(filter.toLowerCase()));
+  const classesDisponibles = CLASSES.filter((c) => visible.some((s) => s.classe === c));
+  const filtered = visible
+    .filter((s) => !classeFilter || s.classe === classeFilter)
+    .filter((s) => `${s.nom} ${s.prenom} ${s.classe} ${formatMatricule(s.nom, s.prenom, s.matriculeNum)}`.toLowerCase().includes(filter.toLowerCase()));
   const detailStudent = students.find((s) => s.id === detailId) || null;
 
   return (
@@ -493,7 +516,13 @@ function ElevesView({ students, onAdd, onUpdate, onRemove, isDirection, isSecret
         {canManage && <button onClick={openAdd} style={btnPrimary}><Plus size={16} /> Ajouter un élève</button>}
       </div>
 
-      <input placeholder="Rechercher un nom, une classe ou un matricule…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 320, marginBottom: 20 }} />
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+        <input placeholder="Rechercher un nom, une classe ou un matricule…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 320, flex: 1 }} />
+        <select style={{ ...inputStyle, maxWidth: 220 }} value={classeFilter} onChange={(e) => setClasseFilter(e.target.value)}>
+          <option value="">Toutes les classes</option>
+          {classesDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
 
       {showForm && canManage && (
         <div style={cardStyle}>
